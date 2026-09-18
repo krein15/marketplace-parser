@@ -1,0 +1,309 @@
+{
+ "total": 117252,
+ "products": [
+  {
+   "id": 839226871,
+   "__sort": 1159809,
+   "ksort": 0,
+   "root": 2362405143,
+   "kindId": 0,
+   "brand": "TehnoVolna",
+   "brandId": 311123295,
+   "siteBrandId": 0,
+   "colors": [
+    {
+     "name": "белый",
+     "id": 16777215
+    }
+   ],
+   "subjectId": 593,
+   "subjectParentId": 6258,
+   "semanticId": [
+    61,
+    63,
+    118,
+    144,
+    162,
+    154,
+    906
+   ],
+   "name": "Наушники беспроводные TWS Pro 2",
+   "entity": "",
+   "matchId": 542197285,
+   "supplier": "Me TradeMark",
+   "supplierId": 1174666,
+   "supplierRating": 5,
+   "supplierFlags": 12272,
+   "pics": 7,
+   "picsUpdate": 0,
+   "rating": 5,
+   "reviewRating": 4.9,
+   "feedbacks": 113476,
+   "panelPromoId": 1056340,
+   "volume": 8,
+   "weight": 0.277,
+   "viewFlags": 548928,
+   "mtype": 5121,
+   "sizes": [
+    {
+     "name": "",
+     "origName": "0",
+     "rank": 0,
+     "optionId": 1260077136,
+     "wh": 218804,
+     "time1": 4,
+     "time2": 23,
+     "dtype": 6614249635841,
+     "ndtype": 197121,
+     "price": {
+      "basic": 253000,
+      "product": 148100,
+      "logistics": 0,
+      "return": 0,
+      "cashback": 0,
+      "wallet": 0
+     },
+     "saleConditions": 2298478592,
+     "payload": "A6+OsnYdCEHn+G2etzMwDJobWcWzlSnDDCsUNWK668oJSZk8snuLGNCmfWD4PxGpWkWgm5XmEUykRFTp/xHk5l5NWHFaEUirnPZW8QsKFAAP/XiIfh5CP2htUHZaDD2AZmcJslBal6bwvoTruaLTjZIUbuT8bYXpLJsaezijpoaJdeSSg5qeR7qlnOjzt/LD/HIfxda34lwLI9ubJ68i9e1Y+rNyOKRPzBJQMRVQybZkTcU2TbTHMZcTj/J6oQlIv2G8ZZh511T59iUyBHtUN+X+o+XC39GyDhlXcCpd8uFFI5/RzAOAQpLUpd4A76Ol974udMj7gjaqU4HHeWA"
+    }
+   ],
+   "totalQuantity": 42,
+   "time1": 4,
+   "time2": 23,
+   "wh": 218804,
+   "dtype": 6614249635841,
+   "ndtype": 197121,
+   "dtypeMask": 9,
+   "dist": 91,
+   "logs": "NGxUgfSVC2VRdQUHUGY98Fv3tFRtoVbAxivKW8thsny//vBc6ei2lln8m4Da+jH8rwMtnNXhKFJjMrq5r+2ggM0Id+Q",
+   "meta": {
+    "tokens": [],
+    "characteristics": [
+     {
+      "name": "Вид наушников",
+      "values": [
+       "Внутриканальные (вакуумные/In-Ear)"
+      ]
+     },
+     {
+      "name": "Тип подключения",
+      "values": [
+       "беспроводное"
+      ]
+     },
+     {
+      "name": "Беспроводные интерфейсы",
+      "values": [
+       "Bluetooth",
+       "Радиоканал",
+       "MagSafe"
+      ]
+     }
+    ],
+    "presetId": 500050012
+   }
+  },
+  {
+   "id": 1470151551,
+   "__sort": 1090166,
+   "ksort": 0,
+   "root": 3870626529,
+   "kindId": 0,
+   "brand": "Lirano",
+   "brandId": 311481282,
+   "siteBrandId": 0,
+   "colors": [
+    {
+     "name": "белый",
+     "id": 16777215
+    }
+   ],
+   "subjectId": 593,
+   "subjectParentId": 6258,
+   "semanticId": [
+    106,
+    63,
+    118,
+    144,
+    22,
+    999999,
+    999999
+   ],
+   "name": "Наушники беспроводные Pro 2",
+   "entity": "",
+   "matchId": 0,
+   "supplier": "Официальный магазин Lirano",
+   "supplierId": 232114,
+   "supplierRating": 4.8,
+   "supplierFlags": 12280,
+   "pics": 9,
+   "picsUpdate": 0,
+   "rating": 5,
+   "reviewRating": 5,
+   "feedbacks": 2598,
+   "panelPromoId": 1056340,
+   "volume": 5,
+   "weight": 0.3,
+   "viewFlags": 134901850,
+   "isNew": true,
+   "mtype": 1025,
+   "sizes": [
+    {
+     "name": "",
+     "origName": "0",
+     "rank": 0,
+     "optionId": 2200282035,
+     "wh": 322053,
+     "time1": 29,
+     "time2": 21,
+     "dtype": 6614249635841,
+     "ndtype": 197121,
+     "price": {
+      "basic": 80300,
+      "product": 55600,
+      "logistics": 0,
+      "return": 0,
+      "cashback": 0,
+      "wallet": 0
+     },
+     "saleConditions": 2281701376,
+     "payload": "A69QBhoRH/1nIqjMeTCTFzmrkMhrhBU6RUAwoIDDhqNnU4tdzNwvmWfVR9axINfRyIlSFXTZXl/bgefNufUhCj2GMWSJnGATJ3zWeFRMdaA6BVQH4t5/M+Rh4hPkEn+QE5jTgceGjTkGSTmvrdYb04OH699pYfx0BhqzXfbf9/XbWOLHfEFRMqilcBqRyUlZsWb50PRXalm92pI6Iu/QmKrLU8ngyT2/26cInClLuthPVsPlUeoiisqqhI4bNpiX140zA6ogwIyintYE6yVKFUJP3IUdtZT1Bi0eEYrYMhPiF0OWics4E+Xn1TgIv2/8judQuLQLb4cYhdae"
+    }
+   ],
+   "totalQuantity": 42,
+   "time1": 29,
+   "time2": 21,
+   "wh": 322053,
+   "dtype": 6614249635841,
+   "ndtype": 197121,
+   "dtypeMask": 1,
+   "dist": 97,
+   "logs": "NCaMhxrdZ4ssBUoyP1ODE0kP/CNO2D7BRexIdwaW53jBymAuDry4Odns3rc8+m02snsxLB+SlldpQqi7EJg4X3+NFdA",
+   "meta": {
+    "tokens": [],
+    "characteristics": [
+     {
+      "name": "Вид наушников",
+      "values": [
+       "Внутриканальные (вакуумные/In-Ear)"
+      ]
+     },
+     {
+      "name": "Тип подключения",
+      "values": [
+       "беспроводное"
+      ]
+     },
+     {
+      "name": "Беспроводные интерфейсы",
+      "values": [
+       "Bluetooth"
+      ]
+     }
+    ],
+    "presetId": 500050012
+   }
+  },
+  {
+   "id": 1453309475,
+   "__sort": 934808,
+   "ksort": 0,
+   "root": 3860871400,
+   "kindId": 0,
+   "brand": "Яндекс",
+   "brandId": 35479,
+   "siteBrandId": 0,
+   "colors": [
+    {
+     "name": "фиолетовый",
+     "id": 15631086
+    }
+   ],
+   "subjectId": 593,
+   "subjectParentId": 6258,
+   "semanticId": [
+    106,
+    63,
+    118,
+    144,
+    22,
+    999999,
+    999999
+   ],
+   "name": "Наушники TWS Дропс Bluetooth Фиолетовый (YNDX-00150VIO)",
+   "entity": "",
+   "matchId": 0,
+   "supplier": "Modern Device",
+   "supplierId": 768659,
+   "supplierRating": 4.8,
+   "supplierFlags": 12240,
+   "pics": 13,
+   "picsUpdate": 0,
+   "rating": 5,
+   "reviewRating": 5,
+   "feedbacks": 14,
+   "panelPromoId": 1056340,
+   "volume": 13,
+   "weight": 0.1,
+   "viewFlags": 1335370,
+   "isNew": true,
+   "mtype": 1025,
+   "sizes": [
+    {
+     "name": "",
+     "origName": "0",
+     "rank": 0,
+     "optionId": 2171796114,
+     "wh": 208782,
+     "time1": 31,
+     "time2": 30,
+     "dtype": 6614249635841,
+     "ndtype": 197121,
+     "price": {
+      "basic": 885000,
+      "product": 638900,
+      "logistics": 0,
+      "return": 0,
+      "cashback": 0,
+      "wallet": 0
+     },
+     "saleConditions": 2281701376,
+     "payload": "A898GpASDpo9OXhk/DhdyKpOS77dmED3HpV9IA/7N/x5UHqSPEkrYNysXkOplxc/pKkq8iwbICYQXApsg6DUtCUwug5Lup/o46yjUm1pv0oDcA45U+f7RzUrsNlX6Bby8hIYanRPGT4rpSTnd92v8X6QExzyvS2Pcvt6920z0n0oZs5xg4zmobCPZ9YqijgdPJdAfMzJw2FvrkcsliYxjzlf59FKdSKRHjA2jom2sm+g9sklb/4/nx4abX6aqxH4JP/VnUrUUfwNoldqLjEYt5A+APi8TV0gjP0Df/BZ4vHEGKOmChKQ6ccQrLj1+wD662I9ZrRxBcWN09i/52U"
+    }
+   ],
+   "totalQuantity": 42,
+   "time1": 31,
+   "time2": 30,
+   "wh": 208782,
+   "dtype": 6614249635841,
+   "ndtype": 197121,
+   "dtypeMask": 1,
+   "dist": 167,
+   "logs": "NI/3Fm9m1Bry3asZlT2S0nlUW4WQvqxQxmJZdV21+EOoCrmckhfMMjkfDGIwPTneR9xeCznxxyI8j3ioo9OyJNuOGnrs+g",
+   "meta": {
+    "tokens": [],
+    "characteristics": [
+     {
+      "name": "Вид наушников",
+      "values": [
+       "Внутриканальные (вакуумные/In-Ear)"
+      ]
+     },
+     {
+      "name": "Тип подключения",
+      "values": [
+       "беспроводное"
+      ]
+     },
+     {
+      "name": "Беспроводные интерфейсы",
+      "values": [
+       "Bluetooth"
+      ]
+     }
+    ],
+    "presetId": 500050012
+   }
+  }
+ ]
+}

@@ -1,0 +1,182 @@
+{
+ "feedbackCount": 114000,
+ "feedbacks": [
+  {
+   "id": "7gYGW9RRzgHfiw85lffZ",
+   "globalUserId": "nsPQiqx2KeO/CRNMQHljbvNT9M4RUJhwOxvpyRoYNKw=",
+   "wbUserId": 0,
+   "wbUserDetails": {
+    "country": "ru",
+    "name": "Калинина",
+    "hasPhoto": false
+   },
+   "nmId": 839226871,
+   "text": "Безумно качественные наушники! Звук бомба, очень удобные.",
+   "pros": "",
+   "cons": "",
+   "matchingSize": "",
+   "matchingPhoto": "",
+   "matchingDescription": "",
+   "productValuation": 5,
+   "color": "белый",
+   "size": "",
+   "createdDate": "2026-09-17T19:26:37Z",
+   "updatedDate": "2026-09-17T19:53:46.031478436Z",
+   "answer": {
+    "text": "Спасибо за Ваш отзыв! Мы даем лучшее качество, которое есть сегодня на рынке различных реплик. Если будет нужна помощь или у Вас будут вопросы, пишите в нашу службу поддержки. Мы рады, что Вам понравились наши беспроводные наушники. С уважением компания Me TradeMark ❤️",
+    "state": "wbRu",
+    "lastUpdate": null,
+    "createDate": "2026-09-17T19:52:37Z",
+    "rejectReason": null,
+    "metadata": {
+     "editText": "",
+     "editRejectReason": 0
+    }
+   },
+   "photos": [
+    {
+     "id": 0,
+     "key": "4/8a49f2a3-f480-47fd-a642-4d9591a08ae1",
+     "isBlurred": false,
+     "isReady": true
+    },
+    {
+     "id": 0,
+     "key": "6/f4f7599e-427a-4212-971b-d5731370c3d8",
+     "isBlurred": false,
+     "isReady": true
+    }
+   ],
+   "video": null,
+   "votes": {
+    "pluses": 0,
+    "minuses": 0
+   },
+   "rank": 1000.0,
+   "statusId": 16,
+   "bables": [
+    "внешний вид",
+    "хорошее качество",
+    "удобно пользоваться"
+   ],
+   "reasons": {
+    "good": [
+     10065,
+     10075,
+     10089
+    ],
+    "bad": []
+   },
+   "excludedFromRating": {
+    "isExcluded": false,
+    "reasons": []
+   }
+  },
+  {
+   "id": "uh54TrUpHlwJX8kuFFCR",
+   "globalUserId": "Lmcb8G61+ONsz0ubxt50lK2XZ2Hklvg50PYebBY4M6MJ",
+   "wbUserId": 0,
+   "wbUserDetails": {
+    "country": "RU",
+    "name": "",
+    "hasPhoto": false
+   },
+   "nmId": 1178393668,
+   "text": "",
+   "pros": "",
+   "cons": "",
+   "matchingSize": "",
+   "matchingPhoto": "",
+   "matchingDescription": "",
+   "productValuation": 5,
+   "color": "белый",
+   "size": "0",
+   "createdDate": "2026-09-17T18:27:40Z",
+   "updatedDate": "2026-09-17T19:53:34.531358918Z",
+   "answer": {
+    "text": "Спасибо за Ваш отзыв! Мы даем лучшее качество, которое есть сегодня на рынке различных реплик. Если будет нужна помощь или у Вас будут вопросы, пишите в нашу службу поддержки. Мы рады, что Вам понравились наши беспроводные наушники. С уважением компания Me TradeMark ❤️",
+    "state": "wbRu",
+    "lastUpdate": null,
+    "createDate": "2026-09-17T19:52:37Z",
+    "rejectReason": null,
+    "metadata": {
+     "editText": "",
+     "editRejectReason": 0
+    }
+   },
+   "video": null,
+   "votes": {
+    "pluses": 0,
+    "minuses": 0
+   },
+   "rank": 999.0,
+   "statusId": 106,
+   "bables": [
+    "хорошее качество"
+   ],
+   "reasons": {
+    "good": [
+     10075
+    ],
+    "bad": []
+   },
+   "excludedFromRating": {
+    "isExcluded": false,
+    "reasons": []
+   }
+  },
+  {
+   "id": "pPBDeLXi698SlXorabDL",
+   "globalUserId": "tkjUGODJsmjagsrB1SqfCjDb9YfTXAlL2efoqNC+LQYk",
+   "wbUserId": 0,
+   "wbUserDetails": {
+    "country": "RU",
+    "name": "",
+    "hasPhoto": false
+   },
+   "nmId": 1178393668,
+   "text": "",
+   "pros": "",
+   "cons": "",
+   "matchingSize": "",
+   "matchingPhoto": "",
+   "matchingDescription": "",
+   "productValuation": 5,
+   "color": "белый",
+   "size": "0",
+   "createdDate": "2026-09-17T18:27:35Z",
+   "updatedDate": "2026-09-17T19:54:25.762708981Z",
+   "answer": {
+    "text": "Спасибо за Ваш отзыв! Мы даем лучшее качество, которое есть сегодня на рынке различных реплик. Если будет нужна помощь или у Вас будут вопросы, пишите в нашу службу поддержки. Мы рады, что Вам понравились наши беспроводные наушники. С уважением компания Me TradeMark ❤️",
+    "state": "wbRu",
+    "lastUpdate": null,
+    "createDate": "2026-09-17T19:52:37Z",
+    "rejectReason": null,
+    "metadata": {
+     "editText": "",
+     "editRejectReason": 0
+    }
+   },
+   "video": null,
+   "votes": {
+    "pluses": 0,
+    "minuses": 0
+   },
+   "rank": 998.0,
+   "statusId": 106,
+   "bables": [
+    "хорошее качество"
+   ],
+   "reasons": {
+    "good": [
+     10075
+    ],
+    "bad": []
+   },
+   "excludedFromRating": {
+    "isExcluded": false,
+    "reasons": []
+   }
+  }
+ ]
+}

@@ -1,0 +1,116 @@
+{
+ "products": [
+  {
+   "id": 839226871,
+   "root": 2362405143,
+   "kindId": 0,
+   "brand": "TehnoVolna",
+   "brandId": 311123295,
+   "siteBrandId": 0,
+   "colors": [
+    {
+     "name": "белый",
+     "id": 16777215
+    }
+   ],
+   "subjectId": 593,
+   "subjectParentId": 6258,
+   "name": "Наушники беспроводные TWS Pro 2",
+   "entity": "",
+   "matchId": 542197285,
+   "supplier": "Me TradeMark",
+   "supplierId": 1174666,
+   "supplierRating": 5,
+   "supplierFlags": 12272,
+   "pics": 7,
+   "picsUpdate": 0,
+   "rating": 5,
+   "reviewRating": 4.9,
+   "feedbacks": 113476,
+   "panelPromoId": 1056340,
+   "volume": 8,
+   "weight": 0.277,
+   "viewFlags": 548864,
+   "mtype": 5121,
+   "promotions": [
+    183297,
+    1000058,
+    1001612,
+    1003234,
+    1006716,
+    1006966,
+    1010988,
+    1013974,
+    1017350,
+    1020775,
+    1022272,
+    1022645,
+    1023420,
+    1023915,
+    1023916,
+    1024264,
+    1027229,
+    1029080,
+    1034402,
+    1038020,
+    1038846,
+    1039313,
+    1039748,
+    1048655,
+    1050848,
+    1051070,
+    1052231,
+    1052293,
+    1056340,
+    1056991,
+    1057490,
+    1057622,
+    1057658,
+    1057901
+   ],
+   "sizes": [
+    {
+     "name": "",
+     "origName": "0",
+     "rank": 0,
+     "optionId": 1260077136,
+     "stocks": [
+      {
+       "wh": 218804,
+       "dtype": 6614249635841,
+       "ndtype": 197121,
+       "dist": 91,
+       "qty": 42,
+       "priority": 92529,
+       "time1": 4,
+       "time2": 23
+      }
+     ],
+     "time1": 4,
+     "time2": 23,
+     "wh": 218804,
+     "dtype": 6614249635841,
+     "ndtype": 197121,
+     "dist": 91,
+     "price": {
+      "basic": 253000,
+      "product": 148100,
+      "logistics": 0,
+      "return": 0,
+      "cashback": 0,
+      "wallet": 0
+     },
+     "saleConditions": 2298478592,
+     "payload": "A3nmvYBNQK/bTxiQmRmt0ZYuRtUEabaOnQmHZ0C+0UmtNCTms5+TDACJu+T8ln3I0b5yOY3qP1iTgcqKDeT/QG7YdZ8PXNqr8/LPX91VHUva9cJUig5fohckA6/Lk9fg1cps4dlF2O9EhypbjxYmwTU4klJHcBLgQ0KLJqj7ZSjcPoVls/43oTrbSStio3GnjtDqPHhGX16fh9VxwoeAo4Etu/f+DM/zMq7WjbrSvx97LchWfb2wn/q3FSyE4bXpPPcAp7VCBH9EBJau9PbvzWWgDeLV5oZVyAOghk8DxONwl7BiFh0sr0ikhvET5e0Fs0cHd1340pfOKEAfRUk"
+    }
+   ],
+   "totalQuantity": 42,
+   "time1": 4,
+   "time2": 23,
+   "wh": 218804,
+   "dtype": 6614249635841,
+   "ndtype": 197121,
+   "dist": 91
+  }
+ ]
+}
