@@ -10,22 +10,22 @@ from . import theme
 
 
 class SectionCard(ctk.CTkFrame):
-    """A rounded card with a numbered title; put content into ``self.body``."""
+    """A rounded card with a title; put content into ``self.body``. ``number`` adds a step badge."""
 
-    def __init__(self, master: ctk.CTkBaseClass, number: int, title: str, hint: str = "") -> None:
+    def __init__(self, master: ctk.CTkBaseClass, number: int | None, title: str, hint: str = "") -> None:
         super().__init__(master, fg_color=theme.CARD_BG, corner_radius=14, border_width=1,
                          border_color=theme.CARD_BORDER)
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=18, pady=(14, 0))
-        badge = ctk.CTkLabel(header, text=str(number), width=24, height=24, corner_radius=12,
-                             fg_color=theme.ACCENT, text_color="#FFFFFF", font=theme.font(12, "bold"))
-        badge.pack(side="left")
-        ctk.CTkLabel(header, text=title, font=theme.font(15, "bold"), text_color=theme.TEXT).pack(side="left", padx=10)
+        header.pack(fill="x", padx=18, pady=(12, 0))
+        if number is not None:
+            ctk.CTkLabel(header, text=str(number), width=24, height=24, corner_radius=12, fg_color=theme.ACCENT,
+                         text_color="#FFFFFF", font=theme.font(12, "bold")).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(header, text=title, font=theme.font(15, "bold"), text_color=theme.TEXT).pack(side="left")
         if hint:
             ctk.CTkLabel(self, text=hint, font=theme.font(12), text_color=theme.TEXT_MUTED, justify="left",
                          anchor="w", wraplength=560).pack(fill="x", padx=18, pady=(4, 0))
         self.body = ctk.CTkFrame(self, fg_color="transparent")
-        self.body.pack(fill="both", expand=True, padx=18, pady=(10, 16))
+        self.body.pack(fill="both", expand=True, padx=18, pady=(8, 14))
 
 
 class MarketplaceToggle(ctk.CTkFrame):
@@ -38,12 +38,12 @@ class MarketplaceToggle(ctk.CTkFrame):
         self._color = color
         self._variable = variable
         self.checkbox = ctk.CTkCheckBox(self, text=title, variable=variable, command=self._changed,
-                                        font=theme.font(15, "bold"), text_color=theme.TEXT,
+                                        font=theme.font(14, "bold"), text_color=theme.TEXT,
                                         fg_color=color, hover_color=color, border_color=color,
-                                        checkbox_width=22, checkbox_height=22, corner_radius=6)
-        self.checkbox.pack(anchor="w", padx=14, pady=(12, 0))
+                                        checkbox_width=20, checkbox_height=20, corner_radius=6)
+        self.checkbox.pack(side="left", padx=(12, 8), pady=10)
         ctk.CTkLabel(self, text=subtitle, font=theme.font(12), text_color=theme.TEXT_MUTED).pack(
-            anchor="w", padx=48, pady=(0, 12))
+            side="left", pady=10)
         self._command = command
         self._refresh()
 

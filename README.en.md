@@ -25,6 +25,10 @@ client does not need Python.
 |---|---|
 | ![Collecting](docs/screenshots/app-running.png) | ![Finished](docs/screenshots/app-done.png) |
 
+Excel columns are picked with checkboxes; the dark theme is switched in the header:
+
+![Column picker](docs/screenshots/app-fields.png)
+
 ## What the report contains
 
 **Products sheet:** marketplace, article, position in search results, name, brand, seller, seller rating, price,
@@ -53,6 +57,31 @@ parser does not forge requests — it works through a real browser:
 
 The browser profile is kept between runs, so the checks pass faster and the Ozon delivery address only has to be
 chosen once (the "Выбрать адрес Ozon…" button).
+
+## System requirements
+
+- Windows 10 or 11, 64-bit. The app does not run on Windows 7 or 8: it is built on Python 3.13 and a current
+  Chrome, neither of which supports those versions any more.
+- Google Chrome or Microsoft Edge (preinstalled on Windows 10 and 11) — the app drives the browser that is
+  already installed instead of bundling one.
+- Access to wildberries.ru and ozon.ru from a Russian IP address.
+- About 400 MB of free disk space.
+
+## First launch: Windows warning and antivirus
+
+The build is not signed with a developer certificate (those cost money), so Windows SmartScreen shows
+"Windows protected your PC" on the first launch: click "More info" → "Run anyway". Once is enough.
+
+An antivirus may ask for permission on every action, because the app starts a browser (`chrome.exe` or
+`msedge.exe`) and the `node.exe` helper that drives it. To allow everything once, add the application folder
+to the exclusions:
+
+- **Windows Defender:** Settings → Privacy & security → Windows Security → Virus & threat protection →
+  Manage settings → Exclusions → Add an exclusion → Folder → pick the folder with `MarketplaceParser.exe`.
+- **Kaspersky:** Settings → Threats and exclusions → Specify trusted applications → add
+  `MarketplaceParser.exe` and lift the restrictions on its activity.
+- **Other antivirus software:** the section is usually called "Exclusions", "Trusted zone" or "Allow list" —
+  add the whole application folder rather than the single file, because the browser and `node.exe` start from it.
 
 ## Installation
 

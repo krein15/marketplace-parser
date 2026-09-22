@@ -66,13 +66,22 @@ class App(ctk.CTk):
         content.grid_columnconfigure(1, weight=2, uniform="columns")
         content.grid_rowconfigure(0, weight=1)
 
-        self.form = ctk.CTkScrollableFrame(content, fg_color="transparent", scrollbar_button_color=theme.CARD_BORDER)
-        self.form.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
-        self._build_marketplaces()
-        self._build_input()
-        self._build_options()
-        self._build_fields()
-        self._build_output()
+        # Tabs instead of one long scrollable column: everything fits on screen, and Tk does not have to
+        # repaint nested rounded frames while scrolling (which left visual artefacts).
+        self.tabs = ctk.CTkTabview(
+            content, fg_color="transparent", corner_radius=12, anchor="nw",
+            segmented_button_selected_color=theme.ACCENT, segmented_button_selected_hover_color=theme.ACCENT_HOVER,
+            segmented_button_unselected_color=theme.NEUTRAL_BUTTON,
+            segmented_button_unselected_hover_color=theme.NEUTRAL_BUTTON_HOVER,
+            segmented_button_fg_color=theme.NEUTRAL_BUTTON, text_color=theme.TEXT)
+        self.tabs.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        collect_tab = self.tabs.add("Сбор")
+        fields_tab = self.tabs.add("Колонки Excel")
+        output_tab = self.tabs.add("Сохранение")
+        self._build_input(collect_tab)
+        self._build_options(collect_tab)
+        self._build_fields(fields_tab)
+        self._build_output(output_tab)
 
         self._build_run_panel(content)
         self._refresh_marketplace_state()
@@ -116,21 +125,22 @@ class App(ctk.CTk):
         self.appearance.set("Системная")
         self.appearance.pack(side="right")
 
-    def _build_marketplaces(self) -> None:
-        card = SectionCard(self.form, 1, "Площадки")
-        card.pack(fill="x", pady=(0, 14))
-        card.body.grid_columnconfigure((0, 1), weight=1, uniform="mp")
+    def _build_marketplaces(self, parent: ctk.CTkBaseClass) -> None:
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 12))
+        row.grid_columnconfigure((0, 1), weight=1, uniform="mp")
         self.mp_vars: dict[str, ctk.BooleanVar] = {}
         for column, (key, title) in enumerate(MARKETPLACES.items()):
             var = ctk.BooleanVar(value=key in self.settings.marketplaces)
             self.mp_vars[key] = var
-            toggle = MarketplaceToggle(card.body, key, title, MARKETPLACE_SUBTITLES[key], var,
+            toggle = MarketplaceToggle(row, key, title, MARKETPLACE_SUBTITLES[key], var,
                                        self._refresh_marketplace_state)
             toggle.grid(row=0, column=column, sticky="ew", padx=(0, 10) if column == 0 else (10, 0))
 
-    def _build_input(self) -> None:
-        card = SectionCard(self.form, 2, "Что собираем")
-        card.pack(fill="x", pady=(0, 14))
+    def _build_input(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, 1, "Площадки и что собираем")
+        card.pack(fill="x", pady=(0, 12))
+        self._build_marketplaces(card.body)
         self.mode = ctk.CTkSegmentedButton(
             card.body, values=list(MODE_TITLES.values()), command=lambda _: self._refresh_mode(),
             font=theme.font(13), height=34, selected_color=theme.ACCENT, selected_hover_color=theme.ACCENT_HOVER,
@@ -179,9 +189,9 @@ class App(ctk.CTk):
         self.mode_container = card.body
         self._refresh_mode()
 
-    def _build_options(self) -> None:
-        card = SectionCard(self.form, 3, "Параметры")
-        card.pack(fill="x", pady=(0, 14))
+    def _build_options(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, 2, "Параметры")
+        card.pack(fill="x", pady=(0, 12))
         row1 = ctk.CTkFrame(card.body, fg_color="transparent")
         row1.pack(fill="x")
         self.max_products = NumberField(row1, "Товаров с каждой площадки", [20, 50, 100, 300, 500, 1000],
@@ -201,17 +211,16 @@ class App(ctk.CTk):
         self.collect_reviews.pack(side="left", anchor="s", pady=(0, 6))
         self.max_reviews = NumberField(row2, "Отзывов на товар", [5, 10, 20, 50, 100, 300], self.settings.max_reviews)
         self.max_reviews.pack(side="left", padx=(24, 0))
+        # Ozon takes its region from the address saved in the parser's browser profile, not from the menu above.
+        ozon_box = ctk.CTkFrame(row2, fg_color="transparent")
+        ozon_box.pack(side="right")
+        ctk.CTkLabel(ozon_box, text="Регион Ozon", font=theme.font(12), text_color=theme.TEXT_MUTED).pack(anchor="w")
+        self.ozon_setup_button = neutral_button(ozon_box, "Выбрать адрес…", self._open_ozon_setup, width=150)
+        self.ozon_setup_button.pack(anchor="w", pady=(4, 0))
         self._refresh_reviews_state()
 
-        ozon_row = ctk.CTkFrame(card.body, fg_color="transparent")
-        ozon_row.pack(fill="x", pady=(14, 0))
-        ctk.CTkLabel(ozon_row, text="Ozon берёт регион из адреса доставки, сохранённого в браузере парсера.",
-                     font=theme.font(12), text_color=theme.TEXT_MUTED).pack(side="left")
-        self.ozon_setup_button = neutral_button(ozon_row, "Выбрать адрес Ozon…", self._open_ozon_setup, width=170)
-        self.ozon_setup_button.pack(side="right")
-
-    def _build_fields(self) -> None:
-        card = SectionCard(self.form, 4, "Колонки в Excel",
+    def _build_fields(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, None, "Какие колонки попадут в файл",
                            hint="Бренд, продавец, категория и цена по карте для Ozon есть только в карточке товара: "
                                 "парсер откроет каждую карточку, сбор займёт больше времени.")
         card.pack(fill="x", pady=(0, 14))
@@ -260,8 +269,8 @@ class App(ctk.CTk):
         neutral_button(buttons, "По умолчанию", set_default, width=120).pack(side="left")
         return variables
 
-    def _build_output(self) -> None:
-        card = SectionCard(self.form, 5, "Сохранение")
+    def _build_output(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, None, "Куда сохранять отчёт")
         card.pack(fill="x", pady=(0, 4))
         row = ctk.CTkFrame(card.body, fg_color="transparent")
         row.pack(fill="x")
