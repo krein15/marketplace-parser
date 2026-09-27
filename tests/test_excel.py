@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 
 from mpparser.export.excel import build_file_name, export_to_excel, price_buckets
 from mpparser.models import Product, Review
+from mpparser.monitoring import CHEAPER, GONE, Change, Comparison, Dynamics
 from mpparser.settings import InputMode, ParseSettings
 
 
@@ -128,3 +129,38 @@ def test_price_buckets_cover_the_range():
     buckets = price_buckets([500.0, 1500.0, 9000.0, 25000.0])
     assert buckets[0][0] == 0
     assert all(low < high for low, high in buckets[:-1])
+
+
+def test_changes_and_dynamics_sheets(tmp_path, products, reviews):
+    comparison = Comparison(previous_at=datetime(2026, 9, 17, 9, 0), marketplaces=["Wildberries"], changes=[
+        Change(CHEAPER, "Wildberries", "1", "Наушники WB", "https://wb/1", 600.0, 556.0),
+        Change(GONE, "Wildberries", "7", "Старые наушники", "https://wb/7", 900.0, None),
+    ])
+    dynamics = Dynamics([datetime(2026, 9, 17, 9, 0), datetime(2026, 9, 18, 10, 0)],
+                        [(products[0], [600.0, 556.0])])
+    settings = ParseSettings(query="наушники", task_name="Наушники ежедневно")
+    path = tmp_path / build_file_name(settings, datetime(2026, 9, 18, 10, 0))
+    assert "Наушники ежедневно" in path.name
+    export_to_excel(path, settings, products, reviews, datetime(2026, 9, 18, 10, 0), comparison, dynamics)
+    workbook = load_workbook(path)
+    assert workbook.sheetnames == ["Сводка", "Изменения", "Товары", "Отзывы", "Динамика цен"]
+    changes = workbook["Изменения"]
+    assert [c.value for c in changes[4]][:3] == ["Статус", "Площадка", "Артикул"]
+    assert [c.value for c in changes[5]][:8] == [CHEAPER, "Wildberries", "1", "Наушники WB", 600, 556, -44, -7.3]
+    assert changes["I5"].hyperlink.target == "https://wb/1"
+    assert changes["A6"].value == "Выпал из выдачи" and changes["F6"].value is None
+    assert "рекламных мест" in changes["A3"].value
+    history = workbook["Динамика цен"]
+    assert [c.value for c in history[4]][:5] == ["Площадка", "Артикул", "Название", "17.09 09:00", "18.09 10:00"]
+    assert [c.value for c in history[5]][3:5] == [600, 556]
+    summary = [row[0] for row in workbook["Сводка"].iter_rows(values_only=True)]
+    assert "Изменения с прошлого запуска" in summary and "Подешевели" in summary and "Задание" in summary
+    assert "Выпали из выдачи" in summary
+
+
+def test_first_run_changes_sheet_explains_itself(tmp_path, products, reviews):
+    path = tmp_path / "report.xlsx"
+    export_to_excel(path, ParseSettings(query="q"), products, reviews, datetime(2026, 9, 18), Comparison(None))
+    workbook = load_workbook(path)
+    assert "первый запуск" in workbook["Изменения"]["A2"].value
+    assert "Динамика цен" not in workbook.sheetnames

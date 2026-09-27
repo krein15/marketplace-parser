@@ -1,4 +1,4 @@
-"""Excel report: "Товары", "Отзывы" and "Сводка" sheets."""
+"""Excel report: "Сводка", "Изменения", "Товары", "Отзывы" and "Динамика цен" sheets."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from ..fields import PRODUCT_FIELDS, REVIEW_FIELDS, Field, resolve
 from ..models import Product, Review
+from ..monitoring import CHEAPER, GONE, NEW, PRICIER, STATUS_ORDER, Comparison, Dynamics
 from ..regions import WB_REGIONS
 from ..settings import MARKETPLACE_SHORT, MARKETPLACES, SORT_TITLES, InputMode, ParseSettings
 
@@ -41,6 +42,11 @@ NUMBER_FORMATS = {
     "datetime": "DD.MM.YYYY HH:MM",
 }
 URL_LABELS = {"image": "Фото", "url": "Открыть"}
+SIGNED_MONEY = '+#,##0 "₽";-#,##0 "₽";0 "₽"'
+SIGNED_PERCENT = '+0.0"%";-0.0"%";0"%"'
+STATUS_FONTS = {CHEAPER: Font(bold=True, color="15803D"), PRICIER: Font(bold=True, color="B91C1C"),
+                NEW: Font(bold=True, color="1D4ED8"), GONE: Font(bold=True, color="6B7280")}
+DOWN_FONT, UP_FONT = Font(color="15803D"), Font(color="B91C1C")
 MAX_CELL_TEXT = 32_000
 MAX_ROW_HEIGHT = 150
 LINE_HEIGHT = 15
@@ -49,6 +55,7 @@ LINE_HEIGHT = 15
 def build_file_name(settings: ParseSettings, started_at: datetime) -> str:
     marketplaces = "+".join(MARKETPLACE_SHORT[key] for key in settings.marketplaces)
     subject = settings.query.strip() if settings.mode == InputMode.QUERY else "артикулы"
+    subject = settings.task_name or subject
     subject = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", subject).strip()[:40].strip() or "сбор"
     return f"{marketplaces}_{subject}_{started_at:%Y-%m-%d_%H-%M-%S}.xlsx"
 
@@ -59,6 +66,8 @@ def export_to_excel(
     products: Sequence[Product],
     reviews: Sequence[Review],
     started_at: datetime,
+    comparison: Comparison | None = None,
+    dynamics: Dynamics | None = None,
 ) -> Path:
     workbook = Workbook()
     products_sheet = workbook.active
@@ -68,7 +77,11 @@ def export_to_excel(
     if settings.collect_reviews:
         review_columns = resolve(REVIEW_FIELDS, settings.review_fields, settings.marketplaces)
         _write_table(workbook.create_sheet("Отзывы"), "Reviews", review_columns, reviews, "C2")
-    _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at)
+    _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at, comparison)
+    if comparison is not None:
+        _write_changes(workbook.create_sheet("Изменения", 1), comparison)
+    if dynamics is not None and len(dynamics.dates) >= 2:
+        _write_dynamics(workbook.create_sheet("Динамика цен"), dynamics)
     workbook.active = 0
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,6 +153,7 @@ def _write_summary(
     products: Sequence[Product],
     reviews: Sequence[Review],
     started_at: datetime,
+    comparison: Comparison | None = None,
 ) -> None:
     sheet.sheet_view.showGridLines = False
     sheet["A1"] = "Сбор данных с маркетплейсов"
@@ -154,6 +168,7 @@ def _write_summary(
     else:
         subject = ("Артикулы", "список артикулов и ссылок")
     params = [
+        *([("Задание", settings.task_name)] if settings.task_name else []),
         ("Площадки", ", ".join(MARKETPLACES[k] for k in settings.marketplaces)),
         subject,
         ("Сортировка", SORT_TITLES[settings.sort] if settings.mode == InputMode.QUERY else "—"),
@@ -168,6 +183,19 @@ def _write_summary(
         sheet.cell(row=row, column=1, value=label).font = MUTED_FONT
         sheet.cell(row=row, column=2, value=value).alignment = Alignment(horizontal="left")
         row += 1
+
+    if comparison is not None:
+        row = _section(sheet, row + 1, "Изменения с прошлого запуска")
+        if comparison.previous_at is None:
+            sheet.cell(row=row, column=1, value="Первый запуск — сравнивать пока не с чем.").font = MUTED_FONT
+            row += 1
+        else:
+            lines = [("", "Прошлый запуск", f"{comparison.previous_at:%d.%m.%Y %H:%M}"),
+                     *((status, comparison.title(status), comparison.count(status)) for status in STATUS_ORDER)]
+            for status, label, value in lines:
+                sheet.cell(row=row, column=1, value=label).font = STATUS_FONTS.get(status, MUTED_FONT)
+                sheet.cell(row=row, column=2, value=value).alignment = Alignment(horizontal="left")
+                row += 1
 
     row = _section(sheet, row + 1, "Итоги по площадкам")
     headers = ["Площадка", "Товаров", "Мин. цена", "Средняя цена", "Медиана", "Макс. цена",
@@ -294,3 +322,91 @@ def _price_chart(sheet: Worksheet, row: int, prices_by_mp: dict[str, list[float]
         series.graphicalProperties.solidFill = MARKETPLACE_COLORS.get(name, "2B2D42")
         series.graphicalProperties.line.solidFill = MARKETPLACE_COLORS.get(name, "2B2D42")
     sheet.add_chart(chart, f"D{row}")
+
+
+# --- monitoring sheets ---
+
+
+def _header_row(sheet: Worksheet, row: int, columns: list[tuple[str, int]]) -> None:
+    for col, (title, width) in enumerate(columns, 1):
+        cell = sheet.cell(row=row, column=col, value=title)
+        cell.fill, cell.font = HEADER_FILL, HEADER_FONT
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        sheet.column_dimensions[get_column_letter(col)].width = width
+    sheet.row_dimensions[row].height = 32
+
+
+def _add_table(sheet: Worksheet, name: str, first_row: int, last_row: int, columns: int) -> None:
+    table = Table(displayName=name, ref=f"A{first_row}:{get_column_letter(columns)}{max(last_row, first_row + 1)}")
+    table.tableStyleInfo = TABLE_STYLE
+    sheet.add_table(table)
+
+
+def _link(cell: Any, url: str) -> None:
+    if url:
+        cell.value, cell.hyperlink, cell.style = "Открыть", url, "Hyperlink"
+
+
+def _write_changes(sheet: Worksheet, comparison: Comparison) -> None:
+    sheet["A1"] = "Изменения с прошлого запуска"
+    sheet["A1"].font = TITLE_FONT
+    if comparison.previous_at is None:
+        sheet["A2"] = ("Это первый запуск с такими параметрами — сравнивать пока не с чем. Со следующего запуска "
+                       "здесь появятся подешевевшие, подорожавшие, новые и пропавшие товары.")
+        sheet["A2"].font = MUTED_FONT
+        return
+    sheet["A2"] = (f"Сравнение с запуском {comparison.previous_at:%d.%m.%Y %H:%M} · "
+                   + ", ".join(comparison.marketplaces))
+    sheet["A2"].font = MUTED_FONT
+    if comparison.search:
+        sheet["A3"] = ("«Новый в выдаче» и «Выпал из выдачи» — товар вошёл в собранные результаты или вышел из них, "
+                       "в том числе из-за смены рекламных мест. Это не значит, что его сняли с продажи.")
+        sheet["A3"].font = MUTED_FONT
+    if not comparison.changes:
+        sheet["A4"] = "Цены и состав товаров не изменились."
+        return
+    columns = [("Статус", 17), ("Площадка", 15), ("Артикул", 14), ("Название", 48), ("Было, ₽", 12),
+               ("Стало, ₽", 12), ("Разница, ₽", 13), ("Разница, %", 12), ("Ссылка", 11)]
+    _header_row(sheet, 4, columns)
+    for row, change in enumerate(comparison.changes, 5):
+        values = [comparison.label(change.status), change.marketplace, change.article, _cell_value(change.name),
+                  change.old_price,
+                  change.new_price, change.delta, change.delta_pct]
+        for col, value in enumerate(values, 1):
+            cell = sheet.cell(row=row, column=col, value=value)
+            cell.alignment = Alignment(vertical="top", wrap_text=col == 4)
+        sheet.cell(row=row, column=1).font = STATUS_FONTS[change.status]
+        sheet.cell(row=row, column=2).font = MARKETPLACE_FONTS.get(change.marketplace, Font())
+        for col in (5, 6):
+            sheet.cell(row=row, column=col).number_format = NUMBER_FORMATS["money"]
+        sheet.cell(row=row, column=7).number_format = SIGNED_MONEY
+        sheet.cell(row=row, column=8).number_format = SIGNED_PERCENT
+        _link(sheet.cell(row=row, column=9), change.url)
+    _add_table(sheet, "Changes", 4, 4 + len(comparison.changes), len(columns))
+    sheet.freeze_panes = "A5"
+
+
+def _write_dynamics(sheet: Worksheet, dynamics: Dynamics) -> None:
+    sheet["A1"] = "Динамика цен"
+    sheet["A1"].font = TITLE_FONT
+    sheet["A2"] = (f"Цена товаров из этого отчёта по последним запускам ({len(dynamics.dates)}). "
+                   "Пустая клетка — товара не было в выдаче. Зелёным — дешевле, чем в прошлый раз, красным — дороже.")
+    sheet["A2"].font = MUTED_FONT
+    columns = [("Площадка", 15), ("Артикул", 14), ("Название", 44),
+               *((f"{date:%d.%m %H:%M}", 12) for date in dynamics.dates), ("Ссылка", 11)]
+    _header_row(sheet, 4, columns)
+    for row, (product, prices) in enumerate(dynamics.rows, 5):
+        sheet.cell(row=row, column=1, value=product.marketplace).font = MARKETPLACE_FONTS.get(product.marketplace,
+                                                                                               Font())
+        sheet.cell(row=row, column=2, value=product.article)
+        sheet.cell(row=row, column=3, value=_cell_value(product.name)).alignment = Alignment(vertical="top")
+        previous = None
+        for offset, price in enumerate(prices):
+            cell = sheet.cell(row=row, column=4 + offset, value=price)
+            cell.number_format = NUMBER_FORMATS["money"]
+            if price is not None and previous is not None and abs(price - previous) >= 1:
+                cell.font = DOWN_FONT if price < previous else UP_FONT
+            previous = price if price is not None else previous
+        _link(sheet.cell(row=row, column=len(columns)), product.url)
+    _add_table(sheet, "Dynamics", 4, 4 + len(dynamics.rows), len(columns))
+    sheet.freeze_panes = "D5"

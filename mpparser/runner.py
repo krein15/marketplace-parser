@@ -1,8 +1,9 @@
-"""Runs a full collection job: marketplaces → products → extra fields → reviews → Excel."""
+"""Runs a full collection job: marketplaces → products → extra fields → reviews → history → Excel."""
 
 from __future__ import annotations
 
 import logging
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from .export.excel import build_file_name, export_to_excel
 from .inputs import collect_ids
 from .marketplaces import PARSERS, Cancelled, MarketplaceParser, ParserError, Reporter
 from .models import Product, Review
+from .monitoring import STATUS_ORDER, Comparison, update_history
 from .settings import InputMode, ParseSettings, app_data_dir
 
 log = logging.getLogger(__name__)
@@ -28,6 +30,8 @@ class RunResult:
     errors: list[str] = field(default_factory=list)
     cancelled: bool = False
     started_at: datetime = field(default_factory=datetime.now)
+    completed: list[str] = field(default_factory=list)  # marketplaces collected without errors
+    comparison: Comparison | None = None
 
 
 def _merge(products: list[Product], more: list[Product]) -> list[Product]:
@@ -44,6 +48,14 @@ async def _listing(parser: MarketplaceParser, link: str, limit: int, reporter: R
         return []
     reporter.log(f"{parser.title}: по ссылке на выдачу собрано товаров — {len(products)}")
     return products
+
+
+def _log_changes(reporter: Reporter, comparison: Comparison) -> None:
+    if comparison.previous_at is None:
+        reporter.log("Первый запуск с такими параметрами: изменения цен появятся со следующего.")
+        return
+    counts = ", ".join(f"{comparison.title(s).lower()} — {comparison.count(s)}" for s in STATUS_ORDER)
+    reporter.log(f"Изменения с {comparison.previous_at:%d.%m %H:%M}: {counts}")
 
 
 async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
@@ -101,6 +113,8 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
                         reporter.log(f"{parser.title}: собрано отзывов — {count}")
                     reporter.set_span(base + share, base + share)
                     reporter.progress(1, 1, f"{parser.title}: готово")
+                    if products:  # an empty result is more likely a site glitch than "everything disappeared"
+                        result.completed.append(key)
                 except (ParserError, BrowserError) as exc:
                     result.errors.append(str(exc))
                     reporter.log(str(exc), "error")
@@ -119,8 +133,18 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
         reporter.log(str(exc), "error")
 
     if result.products:
+        dynamics = None
+        if not result.cancelled and result.completed:
+            try:
+                result.comparison, dynamics = update_history(app_data_dir() / "history.sqlite", settings,
+                                                             result.started_at, result.completed, result.products)
+                _log_changes(reporter, result.comparison)
+            except sqlite3.Error as exc:  # the report matters more than the history
+                log.exception("History update failed")
+                reporter.warn(f"Не удалось обновить историю цен: {exc}")
         path = Path(settings.output_dir) / build_file_name(settings, result.started_at)
-        export_to_excel(path, settings, result.products, result.reviews, result.started_at)
+        export_to_excel(path, settings, result.products, result.reviews, result.started_at, result.comparison,
+                        dynamics)
         result.path = path
         reporter.log(f"Файл сохранён: {path}", "success")
     elif not result.errors and not result.cancelled:

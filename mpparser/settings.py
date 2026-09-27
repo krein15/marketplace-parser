@@ -93,6 +93,7 @@ class ParseSettings:
     output_dir: str = field(default_factory=lambda: str(default_output_dir()))
     open_when_done: bool = True
     show_browser: bool = False
+    task_name: str = ""  # set when the run is a saved monitoring task: its history is kept under this name
 
     def validate(self) -> list[str]:
         """Return human-readable problems; an empty list means the settings can be run."""
@@ -162,14 +163,19 @@ class ParseSettings:
         except (OSError, ValueError) as exc:
             log.warning("Settings file is unreadable, using defaults: %s", exc)
             return cls()
+        return cls.from_dict(raw) or cls()
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> ParseSettings | None:
+        """Settings from saved JSON; unknown keys are ignored. None if the values do not fit."""
         known = {f.name for f in fields(cls)}
-        settings = cls(**{k: v for k, v in raw.items() if k in known})
         try:
+            settings = cls(**{k: v for k, v in raw.items() if k in known})
             settings.mode = InputMode(settings.mode)
             settings.sort = SortOrder(settings.sort)
             settings.avito_seller = SellerType(settings.avito_seller)
-        except ValueError:
-            return cls()
+        except (TypeError, ValueError):
+            return None
         return settings
 
     def save(self) -> None:

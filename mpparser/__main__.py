@@ -1,6 +1,8 @@
 """Command-line interface: ``python -m mpparser --query "наушники" --wb --ozon --ym``.
 
-Handy for automation and scheduled runs; the GUI (``app.py``) covers the same options.
+Handy for automation; the GUI (``app.py``) covers the same options. Saved monitoring tasks run with
+``--task "<name>"`` — that is what Windows Task Scheduler starts every day. Such runs log to
+``logs/tasks.log``, as the built .exe has no console.
 """
 
 from __future__ import annotations
@@ -9,12 +11,17 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 from .fields import PRODUCT_FIELDS, REVIEW_FIELDS
 from .marketplaces import Reporter
 from .regions import DEFAULT_REGION, WB_REGIONS
 from .runner import run
-from .settings import MARKETPLACES, InputMode, ParseSettings, SellerType, SortOrder
+from .settings import MARKETPLACES, InputMode, ParseSettings, SellerType, SortOrder, app_data_dir
+from .tasks import get_task, load_tasks, mark_run
+
+log = logging.getLogger("mpparser.cli")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("-q", "--query", help="поисковый запрос")
     source.add_argument("--ids", action="store_true", help="режим артикулов (см. --wb-ids / --ozon-ids / --ym-ids)")
+    source.add_argument("--task", metavar="НАЗВАНИЕ", help="запустить сохранённое задание мониторинга")
+    source.add_argument("--list-tasks", action="store_true", help="показать сохранённые задания")
     parser.add_argument("--wb-ids", default="", help="артикулы или ссылки WB через запятую")
     parser.add_argument("--ozon-ids", default="", help="артикулы или ссылки Ozon через запятую")
     parser.add_argument("--ym-ids", default="", help="SKU или ссылки Яндекс Маркета через запятую")
@@ -58,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.list_tasks:
+        for task in load_tasks():
+            print(f"{task.name}: {task.describe()}")
+        return 0
+    if args.task:
+        return run_task(args.task, show_browser=args.show_browser, verbose=args.verbose)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
                         format="%(levelname)s %(name)s: %(message)s")
 
@@ -95,7 +110,12 @@ def main(argv: list[str] | None = None) -> int:
     if problems := settings.validate():
         print("\n".join(problems), file=sys.stderr)
         return 2
+    result = asyncio.run(run(settings, console_reporter()))
+    print()
+    return 0 if result.path and not result.errors else 1
 
+
+def console_reporter() -> Reporter:
     last_text = ""
 
     def on_progress(fraction: float, text: str) -> None:
@@ -106,9 +126,36 @@ def main(argv: list[str] | None = None) -> int:
 
     def on_log(level: str, message: str) -> None:
         print(f"\r{'!' if level in ('warning', 'error') else '•'} {message:<70}", flush=True)
+        log.log(logging.WARNING if level in ("warning", "error") else logging.INFO, message)
 
-    result = asyncio.run(run(settings, Reporter(on_log, on_progress)))
+    return Reporter(on_log, on_progress)
+
+
+def run_task(name: str, show_browser: bool = False, verbose: bool = False) -> int:
+    """Run a saved monitoring task; everything is logged to logs/tasks.log."""
+    log_dir = app_data_dir() / "logs"
+    log_dir.mkdir(exist_ok=True)
+    handler = RotatingFileHandler(log_dir / "tasks.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO, handlers=[handler])
+
+    task = get_task(name)
+    if task is None:
+        log.error("Задание «%s» не найдено", name)
+        print(f"Задание «{name}» не найдено. Сохранённые задания: python -m mpparser --list-tasks", file=sys.stderr)
+        return 2
+    settings = task.settings
+    settings.open_when_done = False
+    settings.show_browser = settings.show_browser or show_browser
+    if problems := settings.validate():
+        log.error("Задание «%s» не запущено: %s", name, " ".join(problems))
+        print("\n".join(problems), file=sys.stderr)
+        return 2
+    log.info("Запуск задания «%s»", task.name)
+    result = asyncio.run(run(settings, console_reporter()))
     print()
+    mark_run(task.name, datetime.now(), result.path)
+    log.info("Задание «%s» завершено: %s", task.name, result.path or "файл не создан")
     return 0 if result.path and not result.errors else 1
 
 

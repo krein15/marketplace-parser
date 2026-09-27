@@ -8,6 +8,7 @@ import os
 import queue
 import subprocess
 import threading
+from dataclasses import replace
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -22,6 +23,7 @@ from ..inputs import parse_ids
 from ..marketplaces import Reporter
 from ..regions import AVITO_LOCATIONS, WB_REGIONS
 from ..runner import RunResult, run
+from ..scheduler import SchedulerError, schedule, unschedule
 from ..settings import (
     DELIVERY_DAYS_TITLES,
     MARKETPLACE_SHORT,
@@ -32,6 +34,7 @@ from ..settings import (
     ParseSettings,
     app_data_dir,
 )
+from ..tasks import Task, check_name, delete_task, get_task, load_tasks, mark_run, normalize_time, upsert_task
 from . import theme
 from .widgets import LocationPicker, MarketplaceToggle, NumberField, OptionField, SectionCard, neutral_button
 
@@ -55,6 +58,7 @@ class App(ctk.CTk):
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
         self.last_result: RunResult | None = None
+        self.running_settings: ParseSettings | None = None
         self._closing = False
 
         self.title(f"{APP_NAME} {__version__}")
@@ -81,11 +85,13 @@ class App(ctk.CTk):
         self.tabs.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         collect_tab = self.tabs.add("Сбор")
         filters_tab = self.tabs.add("Фильтры")
+        monitoring_tab = self.tabs.add("Мониторинг")
         fields_tab = self.tabs.add("Колонки Excel")
         output_tab = self.tabs.add("Сохранение")
         self._build_input(collect_tab)
         self._build_options(collect_tab)
         self._build_filters(filters_tab)
+        self._build_monitoring(monitoring_tab)
         self._build_fields(fields_tab)
         self._build_output(output_tab)
 
@@ -136,12 +142,14 @@ class App(ctk.CTk):
         row.pack(fill="x", pady=(0, 12))
         row.grid_columnconfigure(tuple(range(len(MARKETPLACES))), weight=1, uniform="mp")
         self.mp_vars: dict[str, ctk.BooleanVar] = {}
+        self.mp_toggles: dict[str, MarketplaceToggle] = {}
         for column, (key, title) in enumerate(MARKETPLACES.items()):
             var = ctk.BooleanVar(value=key in self.settings.marketplaces)
             self.mp_vars[key] = var
             toggle = MarketplaceToggle(row, key, title, var,
                                        self._refresh_marketplace_state)
             toggle.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
+            self.mp_toggles[key] = toggle
 
     def _build_input(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, 1, "Площадки и что собираем")
@@ -315,6 +323,179 @@ class App(ctk.CTk):
         names = self.avito_locations
         more = f" и ещё {len(names) - 6}" if len(names) > 6 else ""
         self.locations_label.configure(text=", ".join(names[:6]) + more if names else "не выбраны")
+
+    def _build_monitoring(self, parent: ctk.CTkBaseClass) -> None:
+        save = SectionCard(parent, None, "Сохранить текущие настройки как задание",
+                           hint="Задание запоминает вкладки «Сбор», «Фильтры», «Колонки Excel» и «Сохранение». "
+                                "Каждый запуск сравнивается с прошлым: в отчёте появятся листы «Изменения» "
+                                "и «Динамика цен».")
+        save.pack(fill="x", pady=(0, 10))
+        row = ctk.CTkFrame(save.body, fg_color="transparent")
+        row.pack(fill="x")
+        name_box = ctk.CTkFrame(row, fg_color="transparent")
+        name_box.pack(side="left", fill="x", expand=True, padx=(0, 12))
+        ctk.CTkLabel(name_box, text="Название", font=theme.font(12), text_color=theme.TEXT_MUTED).pack(anchor="w")
+        self.task_name = ctk.CTkEntry(name_box, height=34, font=theme.font(13), border_width=1,
+                                      fg_color=theme.INPUT_BG, border_color=theme.CARD_BORDER, text_color=theme.TEXT,
+                                      placeholder_text="Например: Чайники Екатеринбург")
+        self.task_name.pack(fill="x", pady=(4, 0))
+        time_box = ctk.CTkFrame(row, fg_color="transparent")
+        time_box.pack(side="left", padx=(0, 12))
+        ctk.CTkLabel(time_box, text="Каждый день в", font=theme.font(12), text_color=theme.TEXT_MUTED).pack(anchor="w")
+        self.task_time = self._entry(time_box, "09:00", None)
+        self.task_time.configure(width=90)
+        self.task_time.pack(pady=(4, 0))
+        self.save_task_button = ctk.CTkButton(row, text="Сохранить", command=self._save_task, height=34, width=120,
+                                              font=theme.font(13, "bold"), fg_color=theme.ACCENT,
+                                              hover_color=theme.ACCENT_HOVER)
+        self.save_task_button.pack(side="left", anchor="s")
+        ctk.CTkLabel(save.body, text="Без времени задание запускается только вручную. По расписанию программа "
+                                     "запустится сама, если компьютер включён и вы вошли в Windows.",
+                     font=theme.font(11), text_color=theme.TEXT_MUTED, anchor="w", justify="left",
+                     wraplength=560).pack(fill="x", pady=(8, 0))
+
+        saved = SectionCard(parent, None, "Задания")
+        saved.pack(fill="both", expand=True)
+        self.tasks_list = ctk.CTkScrollableFrame(saved.body, height=200, fg_color="transparent")
+        self.tasks_list.pack(fill="both", expand=True)
+        self._refresh_tasks()
+
+    def _refresh_tasks(self, running: bool = False) -> None:
+        if not hasattr(self, "tasks_list"):
+            return
+        for child in self.tasks_list.winfo_children():
+            child.destroy()
+        tasks = load_tasks()
+        if not tasks:
+            ctk.CTkLabel(self.tasks_list, text="Пока нет заданий. Настройте сбор и сохраните его здесь.",
+                         font=theme.font(13), text_color=theme.TEXT_MUTED).pack(anchor="w", pady=6)
+            return
+        state = "disabled" if running else "normal"
+        for task in tasks:
+            row = ctk.CTkFrame(self.tasks_list, fg_color="transparent")
+            row.pack(fill="x", pady=(0, 10))
+            # Buttons are packed first so that a long description wraps instead of pushing them out.
+            neutral_button(row, "Удалить", lambda t=task: self._delete_task(t), width=80,
+                           state=state).pack(side="right", padx=(6, 0))
+            neutral_button(row, "Открыть", lambda t=task: self._open_task(t), width=80,
+                           state=state).pack(side="right", padx=(6, 0))
+            ctk.CTkButton(row, text="Запустить", command=lambda t=task: self._run_task(t), width=96, height=34,
+                          font=theme.font(13), fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER,
+                          state=state).pack(side="right", padx=(12, 0))
+            texts = ctk.CTkFrame(row, fg_color="transparent")
+            texts.pack(side="left", fill="x", expand=True)
+            ctk.CTkLabel(texts, text=task.name, font=theme.font(13, "bold"), text_color=theme.TEXT,
+                         anchor="w").pack(fill="x")
+            last = ""
+            if task.last_run:
+                last = f" · последний запуск {datetime.fromisoformat(task.last_run):%d.%m %H:%M}"
+            ctk.CTkLabel(texts, text=task.describe() + last, font=theme.font(12), text_color=theme.TEXT_MUTED,
+                         anchor="w", justify="left", wraplength=280).pack(fill="x")
+
+    def _save_task(self) -> None:
+        name = self.task_name.get().strip()
+        time = normalize_time(self.task_time.get())
+        problem = check_name(name) or ("Время — в формате ЧЧ:ММ, например 09:00." if time is None else None)
+        if problem:
+            messagebox.showwarning(APP_NAME, problem, parent=self)
+            return
+        settings = self._collect_settings()
+        if settings is None:
+            return
+        existing = get_task(name)
+        try:
+            if time:
+                schedule(name, time)
+            elif existing and existing.time:
+                unschedule(name)
+        except SchedulerError as exc:
+            messagebox.showerror(APP_NAME, str(exc), parent=self)
+            return
+        task = Task(name, replace(settings, task_name=name), time or "",
+                    existing.last_run if existing else "", existing.last_file if existing else "")
+        upsert_task(task)
+        self._log("success", f"Задание «{name}» сохранено" + (f": каждый день в {time}" if time else ""))
+        self._refresh_tasks()
+
+    def _run_task(self, task: Task) -> None:
+        if self.worker and self.worker.is_alive():
+            return
+        if problems := task.settings.validate():
+            messagebox.showwarning(APP_NAME, "\n".join(problems), parent=self)
+            return
+        self._launch(task.settings, f"Старт задания «{task.name}»")
+
+    def _open_task(self, task: Task) -> None:
+        """Put the task's settings into the form, to look at them or change and save them again."""
+        self._apply_settings(task.settings)
+        self.task_name.delete(0, "end")
+        self.task_name.insert(0, task.name)
+        self.task_time.delete(0, "end")
+        if task.time:
+            self.task_time.insert(0, task.time)
+        self._log("info", f"Настройки задания «{task.name}» открыты. Измените их и нажмите «Сохранить» "
+                          "на вкладке «Мониторинг», чтобы обновить задание.")
+        self.tabs.set("Сбор")
+
+    def _delete_task(self, task: Task) -> None:
+        if not messagebox.askyesno(APP_NAME, f"Удалить задание «{task.name}» и его расписание?", parent=self):
+            return
+        try:
+            unschedule(task.name)
+        except SchedulerError as exc:
+            messagebox.showwarning(APP_NAME, str(exc), parent=self)
+        delete_task(task.name)
+        self._log("info", f"Задание «{task.name}» удалено")
+        self._refresh_tasks()
+
+    @staticmethod
+    def _set_switch(switch: ctk.CTkSwitch, value: bool) -> None:
+        if value:
+            switch.select()
+        else:
+            switch.deselect()
+
+    @staticmethod
+    def _set_entry(entry: ctk.CTkEntry, value: object) -> None:
+        entry.delete(0, "end")
+        if value not in (None, ""):
+            entry.insert(0, str(value))
+
+    def _apply_settings(self, settings: ParseSettings) -> None:
+        """Show ``settings`` in every widget of the form."""
+        for key, var in self.mp_vars.items():
+            var.set(key in settings.marketplaces)
+            self.mp_toggles[key]._refresh()
+        self.mode.set(MODE_TITLES[settings.mode])
+        self._set_entry(self.query, settings.query)
+        for key, box in self.ids_boxes.items():
+            box.delete("1.0", "end")
+            box.insert("1.0", getattr(settings, f"{key}_ids"))
+            self._update_ids_counter(key)
+        self.max_products.combo.set(str(settings.max_products))
+        self.sort.menu.set(SORT_TITLES[settings.sort])
+        self.region.menu.set(settings.region)
+        self._set_switch(self.collect_reviews, settings.collect_reviews)
+        self.max_reviews.combo.set(str(settings.max_reviews))
+        self._set_entry(self.price_min, settings.price_min)
+        self._set_entry(self.price_max, settings.price_max)
+        self._set_switch(self.ym_rating_4, settings.ym_rating_4)
+        self.ym_delivery.menu.set(DELIVERY_DAYS_TITLES.get(settings.ym_delivery_days, "Любой"))
+        self.avito_locations = list(settings.avito_locations)
+        self._show_locations()
+        self.avito_seller.menu.set(SELLER_TYPE_TITLES[settings.avito_seller])
+        self._set_switch(self.avito_delivery, settings.avito_delivery)
+        self._set_switch(self.avito_title_only, settings.avito_title_only)
+        for fields, variables, selected in ((PRODUCT_FIELDS, self.product_field_vars, settings.product_fields),
+                                            (REVIEW_FIELDS, self.review_field_vars, settings.review_fields)):
+            for spec in fields:
+                variables[spec.key].set(spec.required or spec.key in selected)
+        self._set_entry(self.output_dir, settings.output_dir)
+        self._set_switch(self.open_when_done, settings.open_when_done)
+        self._set_switch(self.show_browser, settings.show_browser)
+        self._refresh_mode()
+        self._refresh_reviews_state()
+        self._refresh_marketplace_state()
 
     def _build_fields(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, None, "Какие колонки попадут в файл",
@@ -547,8 +728,9 @@ class App(ctk.CTk):
             self.stop_button.pack(fill="x", padx=20, before=self.progress)
         else:
             self.stop_button.pack_forget()
-        for button in (self.ozon_setup_button, self.ym_setup_button):
+        for button in (self.ozon_setup_button, self.ym_setup_button, self.save_task_button):
             button.configure(state="disabled" if running else "normal")
+        self._refresh_tasks(running)
 
     # ------------------------------------------------------------------ actions
 
@@ -558,6 +740,11 @@ class App(ctk.CTk):
         settings = self._collect_settings()
         if settings is None:
             return
+        self._launch(settings, "Старт: " + (f"запрос «{settings.query}»" if settings.mode == InputMode.QUERY
+                                            else "список артикулов и ссылок"))
+
+    def _launch(self, settings: ParseSettings, title: str) -> None:
+        self.running_settings = settings
         self.result_card.pack_forget()
         self.log_box.configure(state="normal")
         self.log_box.delete("1.0", "end")
@@ -566,8 +753,7 @@ class App(ctk.CTk):
         self.percent.configure(text="0%")
         self.cancel_event.clear()
         self._set_running(True)
-        self._log("info", "Старт: " + (f"запрос «{settings.query}»" if settings.mode == InputMode.QUERY
-                                       else "список артикулов"))
+        self._log("info", title)
 
         def work() -> None:
             reporter = Reporter(
@@ -680,13 +866,17 @@ class App(ctk.CTk):
             self.status.configure(text="Готов к работе")
             return
         self.last_result = result
+        settings = self.running_settings or self.settings
+        if settings.task_name:
+            mark_run(settings.task_name, datetime.now(), result.path)
+            self._refresh_tasks()
         if result.path:
-            reviews = f", отзывов: {len(result.reviews)}" if self.settings.collect_reviews else ""
+            reviews = f", отзывов: {len(result.reviews)}" if settings.collect_reviews else ""
             prefix = "Остановлено, сохранено частично" if result.cancelled else "Готово"
             self.result_title.configure(text=f"{prefix}: товаров {len(result.products)}{reviews}")
             self.result_path.configure(text=result.path.name)
             self.result_card.pack(fill="x", padx=20, pady=(12, 20), before=self.result_bottom)
-            if self.settings.open_when_done and not result.cancelled:
+            if settings.open_when_done and not result.cancelled:
                 self._open_result_file()
         elif result.errors:
             self.status.configure(text="Сбор завершился с ошибками — подробности в журнале")
