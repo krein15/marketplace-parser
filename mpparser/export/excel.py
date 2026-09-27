@@ -22,14 +22,15 @@ from openpyxl.worksheet.worksheet import Worksheet
 from ..fields import PRODUCT_FIELDS, REVIEW_FIELDS, Field, resolve
 from ..models import Product, Review
 from ..regions import WB_REGIONS
-from ..settings import MARKETPLACES, SORT_TITLES, InputMode, ParseSettings
+from ..settings import MARKETPLACE_SHORT, MARKETPLACES, SORT_TITLES, InputMode, ParseSettings
 
 HEADER_FILL = PatternFill("solid", fgColor="2B2D42")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
 TITLE_FONT = Font(bold=True, size=16, color="2B2D42")
 SECTION_FONT = Font(bold=True, size=12, color="2B2D42")
 MUTED_FONT = Font(color="6B7280")
-MARKETPLACE_FONTS = {"Wildberries": Font(bold=True, color="A20D8A"), "Ozon": Font(bold=True, color="005BFF")}
+MARKETPLACE_COLORS = {"Wildberries": "A20D8A", "Ozon": "005BFF", "Яндекс Маркет": "E0461A", "Авито": "2E9E3E"}
+MARKETPLACE_FONTS = {name: Font(bold=True, color=color) for name, color in MARKETPLACE_COLORS.items()}
 TABLE_STYLE = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
 
 NUMBER_FORMATS = {
@@ -46,7 +47,7 @@ LINE_HEIGHT = 15
 
 
 def build_file_name(settings: ParseSettings, started_at: datetime) -> str:
-    marketplaces = "+".join("WB" if key == "wb" else MARKETPLACES[key] for key in settings.marketplaces)
+    marketplaces = "+".join(MARKETPLACE_SHORT[key] for key in settings.marketplaces)
     subject = settings.query.strip() if settings.mode == InputMode.QUERY else "артикулы"
     subject = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", subject).strip()[:40].strip() or "сбор"
     return f"{marketplaces}_{subject}_{started_at:%Y-%m-%d_%H-%M-%S}.xlsx"
@@ -62,10 +63,11 @@ def export_to_excel(
     workbook = Workbook()
     products_sheet = workbook.active
     products_sheet.title = "Товары"
-    _write_table(products_sheet, "Products", resolve(PRODUCT_FIELDS, settings.product_fields), products, "C2")
+    product_columns = resolve(PRODUCT_FIELDS, settings.product_fields, settings.marketplaces)
+    _write_table(products_sheet, "Products", product_columns, products, "C2")
     if settings.collect_reviews:
-        _write_table(workbook.create_sheet("Отзывы"), "Reviews", resolve(REVIEW_FIELDS, settings.review_fields),
-                     reviews, "C2")
+        review_columns = resolve(REVIEW_FIELDS, settings.review_fields, settings.marketplaces)
+        _write_table(workbook.create_sheet("Отзывы"), "Reviews", review_columns, reviews, "C2")
     _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at)
     workbook.active = 0
 
@@ -155,7 +157,9 @@ def _write_summary(
         ("Площадки", ", ".join(MARKETPLACES[k] for k in settings.marketplaces)),
         subject,
         ("Сортировка", SORT_TITLES[settings.sort] if settings.mode == InputMode.QUERY else "—"),
-        ("Регион WB", settings.region if settings.region in WB_REGIONS else "—"),
+        *([("Регион WB", settings.region if settings.region in WB_REGIONS else "—")]
+          if "wb" in settings.marketplaces else []),
+        *settings.filters_summary(),
         ("Собрано товаров", len(products)),
         ("Собрано отзывов", len(reviews) if settings.collect_reviews else "не собирались"),
     ]
@@ -286,8 +290,7 @@ def _price_chart(sheet: Worksheet, row: int, prices_by_mp: dict[str, list[float]
     labels = Reference(sheet, min_col=1, min_row=row + 1, max_row=end - 1)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(labels)
-    colors = {"Wildberries": "A20D8A", "Ozon": "005BFF"}
     for series, name in zip(chart.series, names, strict=True):
-        series.graphicalProperties.solidFill = colors.get(name, "2B2D42")
-        series.graphicalProperties.line.solidFill = colors.get(name, "2B2D42")
+        series.graphicalProperties.solidFill = MARKETPLACE_COLORS.get(name, "2B2D42")
+        series.graphicalProperties.line.solidFill = MARKETPLACE_COLORS.get(name, "2B2D42")
     sheet.add_chart(chart, f"D{row}")

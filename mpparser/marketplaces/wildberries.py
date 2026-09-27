@@ -33,6 +33,7 @@ SEARCH_PAGE_SIZE = 100
 SEARCH_MAX_PAGES = 100  # WB does not return results beyond page 100
 DETAIL_BATCH = 50
 
+MAX_PRICE = 100_000_000  # upper bound of an open-ended price filter, rubles
 SORTS = {
     SortOrder.POPULAR: "popular",
     SortOrder.PRICE_ASC: "priceup",
@@ -232,7 +233,7 @@ class WildberriesParser(MarketplaceParser):
         return products
 
     async def _search_page(self, query: str, sort: SortOrder, page_no: int) -> dict[str, Any]:
-        return await self._api(self.search_path, {
+        params: dict[str, Any] = {
             "dest": self._dest(),
             "inheritFilters": "true",
             "page": page_no,
@@ -240,7 +241,11 @@ class WildberriesParser(MarketplaceParser):
             "resultset": "catalog",
             "sort": SORTS[sort],
             "suppressSpellcheck": "false",
-        })
+        }
+        if self.settings.price_min is not None or self.settings.price_max is not None:
+            # Kopecks, "min;max".
+            params["priceU"] = f"{(self.settings.price_min or 0) * 100};{(self.settings.price_max or MAX_PRICE) * 100}"
+        return await self._api(self.search_path, params)
 
     async def products_by_ids(self, articles: list[str]) -> list[Product]:
         found: dict[str, Product] = {}

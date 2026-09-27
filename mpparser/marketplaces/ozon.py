@@ -31,6 +31,7 @@ API = "/api/entrypoint-api.bx/page/json/v2?url="
 ANTIBOT_TIMEOUT = 45
 BLOCKED_TITLES = ("Доступ ограничен", "нет соединения")
 MAX_SEARCH_CHUNKS = 300
+MAX_PRICE = 100_000_000  # upper bound of an open-ended price filter
 
 SORTS = {
     SortOrder.POPULAR: "score",
@@ -269,6 +270,9 @@ class OzonParser(MarketplaceParser):
         path: str | None = f"/search/?text={quote(query)}&from_global=true"
         if SORTS[sort] != "score":
             path += f"&sorting={SORTS[sort]}"
+        if self.settings.price_min is not None or self.settings.price_max is not None:
+            low, high = self.settings.price_min or 0, self.settings.price_max or MAX_PRICE
+            path += f"&currency_price={low}.000%3B{high}.000"
         products: list[Product] = []
         seen: set[str] = set()
         chunks = 0

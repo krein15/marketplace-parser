@@ -1,4 +1,4 @@
-"""Command-line interface: ``python -m mpparser --query "наушники" --wb --ozon``.
+"""Command-line interface: ``python -m mpparser --query "наушники" --wb --ozon --ym``.
 
 Handy for automation and scheduled runs; the GUI (``app.py``) covers the same options.
 """
@@ -14,20 +14,34 @@ from .fields import PRODUCT_FIELDS, REVIEW_FIELDS
 from .marketplaces import Reporter
 from .regions import DEFAULT_REGION, WB_REGIONS
 from .runner import run
-from .settings import InputMode, ParseSettings, SortOrder
+from .settings import MARKETPLACES, InputMode, ParseSettings, SellerType, SortOrder
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="mpparser", description="Сбор товаров, цен и отзывов с Wildberries и Ozon в Excel"
+        prog="mpparser", description="Сбор товаров, цен и отзывов с Wildberries, Ozon, Яндекс Маркета и Авито в Excel"
     )
     parser.add_argument("--wb", action="store_true", help="собирать с Wildberries")
     parser.add_argument("--ozon", action="store_true", help="собирать с Ozon")
+    parser.add_argument("--ym", action="store_true", help="собирать с Яндекс Маркета")
+    parser.add_argument("--avito", action="store_true", help="собирать с Авито")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("-q", "--query", help="поисковый запрос")
-    source.add_argument("--ids", action="store_true", help="режим артикулов (см. --wb-ids / --ozon-ids)")
+    source.add_argument("--ids", action="store_true", help="режим артикулов (см. --wb-ids / --ozon-ids / --ym-ids)")
     parser.add_argument("--wb-ids", default="", help="артикулы или ссылки WB через запятую")
     parser.add_argument("--ozon-ids", default="", help="артикулы или ссылки Ozon через запятую")
+    parser.add_argument("--ym-ids", default="", help="SKU или ссылки Яндекс Маркета через запятую")
+    parser.add_argument("--avito-ids", default="", help="ссылки на объявления или на выдачу Авито через запятую")
+    filters = parser.add_argument_group("фильтры")
+    filters.add_argument("--price-min", type=int, help="цена от, ₽ (все площадки)")
+    filters.add_argument("--price-max", type=int, help="цена до, ₽ (все площадки)")
+    filters.add_argument("--ym-rating4", action="store_true", help="Маркет: рейтинг от 4.0")
+    filters.add_argument("--ym-delivery", type=int, choices=[3, 7], default=0, help="Маркет: срок доставки, дней")
+    filters.add_argument("--avito-city", action="append", metavar="ГОРОД",
+                         help="Авито: город или регион (можно несколько раз), по умолчанию вся Россия")
+    filters.add_argument("--avito-seller", choices=[s.value for s in SellerType], default=SellerType.ALL.value)
+    filters.add_argument("--avito-delivery", action="store_true", help="Авито: только с Авито Доставкой")
+    filters.add_argument("--avito-title-only", action="store_true", help="Авито: искать только в названиях")
     parser.add_argument("-n", "--max-products", type=int, default=100)
     parser.add_argument("-r", "--reviews", type=int, default=0, metavar="N", help="отзывов на товар (0 — не собирать)")
     parser.add_argument("--sort", choices=[s.value for s in SortOrder], default=SortOrder.POPULAR.value)
@@ -48,11 +62,20 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(levelname)s %(name)s: %(message)s")
 
     settings = ParseSettings(
-        marketplaces=[k for k, on in (("wb", args.wb), ("ozon", args.ozon)) if on] or ["wb", "ozon"],
+        marketplaces=[k for k in MARKETPLACES if getattr(args, k)] or ["wb", "ozon"],
         mode=InputMode.QUERY if args.query else InputMode.IDS,
         query=args.query or "",
         wb_ids=args.wb_ids,
         ozon_ids=args.ozon_ids,
+        ym_ids=args.ym_ids,
+        avito_ids=args.avito_ids,
+        price_min=args.price_min,
+        price_max=args.price_max,
+        ym_rating_4=args.ym_rating4,
+        ym_delivery_days=args.ym_delivery,
+        avito_seller=SellerType(args.avito_seller),
+        avito_delivery=args.avito_delivery,
+        avito_title_only=args.avito_title_only,
         max_products=args.max_products,
         sort=SortOrder(args.sort),
         collect_reviews=args.reviews > 0,
@@ -67,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         settings.review_fields = args.review_fields.split(",")
     if args.output_dir:
         settings.output_dir = args.output_dir
+    if args.avito_city:
+        settings.avito_locations = args.avito_city
     if problems := settings.validate():
         print("\n".join(problems), file=sys.stderr)
         return 2

@@ -20,25 +20,29 @@ from ..browser import Browser, BrowserError
 from ..fields import PRODUCT_FIELDS, REVIEW_FIELDS, Field
 from ..inputs import parse_ids
 from ..marketplaces import Reporter
-from ..regions import WB_REGIONS
+from ..regions import AVITO_LOCATIONS, WB_REGIONS
 from ..runner import RunResult, run
 from ..settings import (
+    DELIVERY_DAYS_TITLES,
+    MARKETPLACE_SHORT,
     MARKETPLACES,
+    SELLER_TYPE_TITLES,
     SORT_TITLES,
     InputMode,
     ParseSettings,
     app_data_dir,
 )
 from . import theme
-from .widgets import MarketplaceToggle, NumberField, OptionField, SectionCard, neutral_button
+from .widgets import LocationPicker, MarketplaceToggle, NumberField, OptionField, SectionCard, neutral_button
 
 log = logging.getLogger(__name__)
 
 MODE_TITLES = {InputMode.QUERY: "Поисковый запрос", InputMode.IDS: "Артикулы и ссылки"}
-MARKETPLACE_SUBTITLES = {"wb": "wildberries.ru", "ozon": "ozon.ru"}
 IDS_PLACEHOLDERS = {
     "wb": "145726284\nhttps://www.wildberries.ru/catalog/839226871/detail.aspx",
     "ozon": "3627230434\nhttps://www.ozon.ru/product/…-5413455528/",
+    "ym": "4485111241\nhttps://market.yandex.ru/card/…/4485111241\nссылка на выдачу с фильтрами",
+    "avito": "https://www.avito.ru/…_2324430574\nссылка на выдачу или продавца",
 }
 LOG_COLORS = {"warning": theme.WARNING, "error": theme.DANGER, "success": theme.SUCCESS}
 
@@ -76,10 +80,12 @@ class App(ctk.CTk):
             segmented_button_fg_color=theme.NEUTRAL_BUTTON, text_color=theme.TEXT)
         self.tabs.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         collect_tab = self.tabs.add("Сбор")
+        filters_tab = self.tabs.add("Фильтры")
         fields_tab = self.tabs.add("Колонки Excel")
         output_tab = self.tabs.add("Сохранение")
         self._build_input(collect_tab)
         self._build_options(collect_tab)
+        self._build_filters(filters_tab)
         self._build_fields(fields_tab)
         self._build_output(output_tab)
 
@@ -114,7 +120,7 @@ class App(ctk.CTk):
         titles = ctk.CTkFrame(header, fg_color="transparent")
         titles.pack(side="left", padx=12)
         ctk.CTkLabel(titles, text=APP_NAME, font=theme.font(21, "bold"), text_color=theme.TEXT).pack(anchor="w")
-        ctk.CTkLabel(titles, text="Сбор товаров, цен и отзывов с Wildberries и Ozon в Excel",
+        ctk.CTkLabel(titles, text="Товары, цены и отзывы с Wildberries, Ozon, Яндекс Маркета и Авито в Excel",
                      font=theme.font(13), text_color=theme.TEXT_MUTED).pack(anchor="w")
 
         self.appearance = ctk.CTkSegmentedButton(
@@ -128,14 +134,14 @@ class App(ctk.CTk):
     def _build_marketplaces(self, parent: ctk.CTkBaseClass) -> None:
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", pady=(0, 12))
-        row.grid_columnconfigure((0, 1), weight=1, uniform="mp")
+        row.grid_columnconfigure(tuple(range(len(MARKETPLACES))), weight=1, uniform="mp")
         self.mp_vars: dict[str, ctk.BooleanVar] = {}
         for column, (key, title) in enumerate(MARKETPLACES.items()):
             var = ctk.BooleanVar(value=key in self.settings.marketplaces)
             self.mp_vars[key] = var
-            toggle = MarketplaceToggle(row, key, title, MARKETPLACE_SUBTITLES[key], var,
+            toggle = MarketplaceToggle(row, key, title, var,
                                        self._refresh_marketplace_state)
-            toggle.grid(row=0, column=column, sticky="ew", padx=(0, 10) if column == 0 else (10, 0))
+            toggle.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
 
     def _build_input(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, 1, "Площадки и что собираем")
@@ -159,7 +165,7 @@ class App(ctk.CTk):
         self.query.bind("<Return>", lambda _: self._start())
 
         self.ids_frame = ctk.CTkFrame(card.body, fg_color="transparent")
-        self.ids_frame.grid_columnconfigure((0, 1), weight=1, uniform="ids")
+        self.ids_frame.grid_columnconfigure(tuple(range(len(MARKETPLACES))), weight=1, uniform="ids")
         self.ids_boxes: dict[str, ctk.CTkTextbox] = {}
         self.ids_counters: dict[str, ctk.CTkLabel] = {}
         self.ids_columns: dict[str, ctk.CTkFrame] = {}
@@ -184,7 +190,7 @@ class App(ctk.CTk):
             self.ids_boxes[key] = box
             ctk.CTkLabel(frame, text="По одному на строку: артикул или ссылка\nпример: " +
                          IDS_PLACEHOLDERS[key].replace("\n", ", "), font=theme.font(11),
-                         text_color=theme.TEXT_MUTED, justify="left", anchor="w", wraplength=300).pack(fill="x")
+                         text_color=theme.TEXT_MUTED, justify="left", anchor="w", wraplength=230).pack(fill="x")
             self._update_ids_counter(key)
         self.mode_container = card.body
         self._refresh_mode()
@@ -194,7 +200,7 @@ class App(ctk.CTk):
         card.pack(fill="x", pady=(0, 12))
         row1 = ctk.CTkFrame(card.body, fg_color="transparent")
         row1.pack(fill="x")
-        self.max_products = NumberField(row1, "Товаров с каждой площадки", [20, 50, 100, 300, 500, 1000],
+        self.max_products = NumberField(row1, "Товаров на запрос / ссылку", [20, 50, 100, 300, 500, 1000],
                                         self.settings.max_products, width=150)
         self.max_products.pack(side="left", padx=(0, 18))
         self.sort = OptionField(row1, "Сортировка", list(SORT_TITLES.values()), SORT_TITLES[self.settings.sort], 180)
@@ -219,10 +225,102 @@ class App(ctk.CTk):
         self.ozon_setup_button.pack(anchor="w", pady=(4, 0))
         self._refresh_reviews_state()
 
+    def _build_filters(self, parent: ctk.CTkBaseClass) -> None:
+        common = SectionCard(parent, None, "Для всех площадок",
+                             hint="Другие фильтры — бренд, категорию, магазин — настройте на сайте и вставьте ссылку "
+                                  "на выдачу на вкладке «Сбор» в режиме «Артикулы и ссылки».")
+        common.pack(fill="x", pady=(0, 10))
+        row = ctk.CTkFrame(common.body, fg_color="transparent")
+        row.pack(fill="x")
+        ctk.CTkLabel(row, text="Цена, ₽", font=theme.font(13), text_color=theme.TEXT).pack(side="left", padx=(0, 12))
+        self.price_min = self._entry(row, "от", self.settings.price_min)
+        self.price_min.pack(side="left", padx=(0, 8))
+        self.price_max = self._entry(row, "до", self.settings.price_max)
+        self.price_max.pack(side="left", padx=(0, 12))
+        ctk.CTkLabel(row, text="Ozon и Маркет сравнивают с ценой\nпо карте / с Пэй", font=theme.font(11),
+                     text_color=theme.TEXT_MUTED, justify="left").pack(side="left")
+
+        ym = SectionCard(parent, None, "Яндекс Маркет")
+        ym.pack(fill="x", pady=(0, 10))
+        row = ctk.CTkFrame(ym.body, fg_color="transparent")
+        row.pack(fill="x")
+        self.ym_rating_4 = self._switch(row, "Рейтинг от 4.0", self.settings.ym_rating_4)
+        self.ym_rating_4.pack(side="left", anchor="s", pady=(0, 6), padx=(0, 24))
+        self.ym_delivery = OptionField(row, "Срок доставки", list(DELIVERY_DAYS_TITLES.values()),
+                                       DELIVERY_DAYS_TITLES.get(self.settings.ym_delivery_days, "Любой"), 150)
+        self.ym_delivery.pack(side="left", padx=(0, 24))
+        region_box = ctk.CTkFrame(row, fg_color="transparent")
+        region_box.pack(side="right")
+        ctk.CTkLabel(region_box, text="Регион: по IP или адресу в аккаунте", font=theme.font(12),
+                     text_color=theme.TEXT_MUTED).pack(anchor="w")
+        self.ym_setup_button = neutral_button(region_box, "Выбрать адрес…", self._open_ym_setup, width=150)
+        self.ym_setup_button.pack(anchor="w", pady=(4, 0))
+
+        avito = SectionCard(parent, None, "Авито")
+        avito.pack(fill="x")
+        row = ctk.CTkFrame(avito.body, fg_color="transparent")
+        row.pack(fill="x")
+        self.avito_locations: list[str] = list(self.settings.avito_locations)
+        cities = ctk.CTkFrame(row, fg_color="transparent")
+        cities.pack(side="left", fill="x", expand=True, padx=(0, 18))
+        ctk.CTkLabel(cities, text="Города и регионы (поиск идёт по каждому)", font=theme.font(12),
+                     text_color=theme.TEXT_MUTED).pack(anchor="w")
+        pick = ctk.CTkFrame(cities, fg_color="transparent")
+        pick.pack(fill="x", pady=(4, 0))
+        neutral_button(pick, "Выбрать…", self._pick_locations, width=110).pack(side="left", padx=(0, 10))
+        self.locations_label = ctk.CTkLabel(pick, text="", font=theme.font(13), text_color=theme.TEXT, anchor="w",
+                                            justify="left", wraplength=330)
+        self.locations_label.pack(side="left", fill="x", expand=True)
+        self._show_locations()
+        self.avito_seller = OptionField(row, "Продавцы", list(SELLER_TYPE_TITLES.values()),
+                                        SELLER_TYPE_TITLES[self.settings.avito_seller], 130)
+        self.avito_seller.pack(side="left")
+        row = ctk.CTkFrame(avito.body, fg_color="transparent")
+        row.pack(fill="x", pady=(12, 0))
+        self.avito_delivery = self._switch(row, "Только с Авито Доставкой", self.settings.avito_delivery)
+        self.avito_delivery.pack(side="left", padx=(0, 24))
+        self.avito_title_only = self._switch(row, "Искать только в названиях", self.settings.avito_title_only)
+        self.avito_title_only.pack(side="left")
+
+    def _entry(self, master: ctk.CTkBaseClass, placeholder: str, value: int | None) -> ctk.CTkEntry:
+        entry = ctk.CTkEntry(master, width=110, height=34, font=theme.font(13), border_width=1,
+                             fg_color=theme.INPUT_BG, border_color=theme.CARD_BORDER, text_color=theme.TEXT,
+                             placeholder_text=placeholder)
+        if value is not None:
+            entry.insert(0, str(value))
+        return entry
+
+    def _switch(self, master: ctk.CTkBaseClass, text: str, value: bool) -> ctk.CTkSwitch:
+        switch = ctk.CTkSwitch(master, text=text, font=theme.font(13), text_color=theme.TEXT,
+                               progress_color=theme.ACCENT)
+        if value:
+            switch.select()
+        return switch
+
+    @staticmethod
+    def _price(entry: ctk.CTkEntry) -> int | str | None:
+        text = entry.get().strip().replace(" ", "")
+        if not text:
+            return None
+        return int(text) if text.isdigit() else "error"
+
+    def _pick_locations(self) -> None:
+        def done(selected: list[str]) -> None:
+            self.avito_locations = selected
+            self._show_locations()
+
+        LocationPicker(self, list(AVITO_LOCATIONS), self.avito_locations, done)
+
+    def _show_locations(self) -> None:
+        names = self.avito_locations
+        more = f" и ещё {len(names) - 6}" if len(names) > 6 else ""
+        self.locations_label.configure(text=", ".join(names[:6]) + more if names else "не выбраны")
+
     def _build_fields(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, None, "Какие колонки попадут в файл",
-                           hint="Бренд, продавец, категория и цена по карте для Ozon есть только в карточке товара: "
-                                "парсер откроет каждую карточку, сбор займёт больше времени.")
+                           hint="Бренд, продавец и категория для Ozon и Маркета, а также адрес, просмотры и тип "
+                                "продавца для Авито есть только на странице товара: парсер откроет каждую, "
+                                "сбор займёт больше времени. На Авито — около 6 секунд на объявление.")
         card.pack(fill="x", pady=(0, 14))
         tabs = ctk.CTkTabview(card.body, height=10, fg_color=theme.INPUT_BG, corner_radius=10,
                               segmented_button_selected_color=theme.ACCENT,
@@ -245,7 +343,7 @@ class App(ctk.CTk):
         variables: dict[str, ctk.BooleanVar] = {}
         for index, spec in enumerate(fields):
             var = ctk.BooleanVar(value=spec.required or spec.key in selected)
-            suffix = {"wb": "  · WB", "ozon": "  · Ozon"}.get(spec.only or "", "")
+            suffix = "  · " + ", ".join(MARKETPLACE_SHORT[k] for k in spec.only) if spec.only else ""
             box = ctk.CTkCheckBox(grid, text=spec.title + suffix, variable=var, font=theme.font(13),
                                   text_color=theme.TEXT, fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER,
                                   checkbox_width=20, checkbox_height=20, corner_radius=5,
@@ -365,9 +463,12 @@ class App(ctk.CTk):
         for frame in self.ids_columns.values():
             frame.grid_forget()
         visible = [k for k in MARKETPLACES if k in selected] or list(MARKETPLACES)
+        # Visible boxes share the whole width; columns of hidden marketplaces collapse.
+        for column in range(len(MARKETPLACES)):
+            shown = column < len(visible)
+            self.ids_frame.grid_columnconfigure(column, weight=1 if shown else 0, uniform="ids" if shown else "")
         for column, key in enumerate(visible):
-            self.ids_columns[key].grid(row=0, column=column, columnspan=2 if len(visible) == 1 else 1, sticky="nsew",
-                                       padx=(0, 8) if column == 0 and len(visible) > 1 else (8, 0) if column else 0)
+            self.ids_columns[key].grid(row=0, column=column, sticky="nsew", padx=(8 if column else 0, 0))
         self.region.menu.configure(state="normal" if "wb" in selected else "disabled")
 
     def _refresh_mode(self) -> None:
@@ -379,7 +480,6 @@ class App(ctk.CTk):
             self.ids_frame.pack(fill="x", pady=(12, 0))
         if hasattr(self, "sort"):
             self.sort.menu.configure(state="normal" if self._current_mode() == InputMode.QUERY else "disabled")
-            self.max_products.set_enabled(self._current_mode() == InputMode.QUERY)
 
     def _current_mode(self) -> InputMode:
         return next(mode for mode, title in MODE_TITLES.items() if title == self.mode.get())
@@ -403,17 +503,28 @@ class App(ctk.CTk):
             problems.append("Количество товаров должно быть числом.")
         if self.collect_reviews.get() and max_reviews is None:
             problems.append("Количество отзывов должно быть числом.")
+        price_min, price_max = (self._price(entry) for entry in (self.price_min, self.price_max))
+        if "error" in (price_min, price_max):
+            problems.append("Цена в фильтре должна быть целым числом рублей.")
+            price_min = price_max = None
         settings = ParseSettings(
             marketplaces=self._selected_marketplaces(),
             mode=self._current_mode(),
             query=self.query.get().strip(),
-            wb_ids=self.ids_boxes["wb"].get("1.0", "end").strip(),
-            ozon_ids=self.ids_boxes["ozon"].get("1.0", "end").strip(),
+            **{f"{key}_ids": box.get("1.0", "end").strip() for key, box in self.ids_boxes.items()},
             max_products=max_products or self.settings.max_products,
             sort=next(order for order, title in SORT_TITLES.items() if title == self.sort.get()),
             collect_reviews=bool(self.collect_reviews.get()),
             max_reviews=max_reviews or self.settings.max_reviews,
             region=self.region.get(),
+            price_min=price_min,
+            price_max=price_max,
+            ym_rating_4=bool(self.ym_rating_4.get()),
+            ym_delivery_days=next(d for d, title in DELIVERY_DAYS_TITLES.items() if title == self.ym_delivery.get()),
+            avito_locations=list(self.avito_locations),
+            avito_seller=next(s for s, title in SELLER_TYPE_TITLES.items() if title == self.avito_seller.get()),
+            avito_delivery=bool(self.avito_delivery.get()),
+            avito_title_only=bool(self.avito_title_only.get()),
             product_fields=[k for k, v in self.product_field_vars.items() if v.get()],
             review_fields=[k for k, v in self.review_field_vars.items() if v.get()],
             output_dir=self.output_dir.get().strip(),
@@ -436,7 +547,8 @@ class App(ctk.CTk):
             self.stop_button.pack(fill="x", padx=20, before=self.progress)
         else:
             self.stop_button.pack_forget()
-        self.ozon_setup_button.configure(state="disabled" if running else "normal")
+        for button in (self.ozon_setup_button, self.ym_setup_button):
+            button.configure(state="disabled" if running else "normal")
 
     # ------------------------------------------------------------------ actions
 
@@ -479,32 +591,42 @@ class App(ctk.CTk):
         self.stop_button.configure(state="disabled", text="Останавливаю…")
 
     def _open_ozon_setup(self) -> None:
+        self._open_site_setup("Ozon", "https://www.ozon.ru/",
+                              "Укажите адрес доставки (вверху страницы) и закройте окно браузера — адрес "
+                              "сохранится для следующих запусков.")
+
+    def _open_ym_setup(self) -> None:
+        self._open_site_setup("Яндекс Маркет", "https://market.yandex.ru/",
+                              "Маркет даёт сменить регион только после входа: войдите в свой аккаунт Яндекса, "
+                              "выберите адрес доставки или пункт выдачи и закройте окно браузера. Регион сохранится "
+                              "для следующих запусков.\n\nБез входа Маркет определяет регион по IP компьютера.")
+
+    def _open_site_setup(self, title: str, url: str, instruction: str) -> None:
+        """Open the parser's browser profile on ``url`` so that the user sets the delivery region by hand."""
         if self.worker and self.worker.is_alive():
             return
-        messagebox.showinfo(APP_NAME, "Откроется браузер парсера с сайтом Ozon.\n\nУкажите адрес доставки "
-                                      "(вверху страницы) и закройте окно браузера — адрес сохранится "
-                                      "для следующих запусков.", parent=self)
+        messagebox.showinfo(APP_NAME, f"Откроется браузер парсера с сайтом {title}.\n\n{instruction}", parent=self)
 
         def work() -> None:
             async def session() -> None:
                 async with Browser(app_data_dir() / "browser-profile", headless=False) as browser:
                     page = await browser.new_page()
-                    await page.goto("https://www.ozon.ru/", wait_until="domcontentloaded", timeout=60_000)
+                    await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
                     await browser.context.wait_for_event("close", timeout=0)
 
             try:
                 asyncio.run(session())
-                self.events.put(("log", ("success", "Браузер закрыт, адрес Ozon сохранён в профиле.")))
+                self.events.put(("log", ("success", f"Браузер закрыт, адрес {title} сохранён в профиле.")))
             except BrowserError as exc:
                 self.events.put(("log", ("error", str(exc))))
             except Exception as exc:
-                log.debug("Ozon setup browser closed: %s", exc)
+                log.debug("%s setup browser closed: %s", title, exc)
             self.events.put(("done", None))
 
         self._set_running(True)
         self.stop_button.configure(state="disabled")
-        self.status.configure(text="Браузер открыт: выберите адрес на Ozon и закройте окно")
-        self.worker = threading.Thread(target=work, name="ozon-setup", daemon=True)
+        self.status.configure(text=f"Браузер открыт: выберите адрес на сайте {title} и закройте окно")
+        self.worker = threading.Thread(target=work, name="site-setup", daemon=True)
         self.worker.start()
 
     def _choose_dir(self) -> None:

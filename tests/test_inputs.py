@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
 from mpparser.inputs import collect_ids, parse_ids
-from mpparser.textutils import parse_count, parse_float, parse_int
+from mpparser.textutils import parse_count, parse_float, parse_int, parse_ru_date
 
 
 def test_links_go_to_their_marketplace_regardless_of_the_box():
@@ -38,6 +40,16 @@ def test_old_ozon_link_format():
     assert parse_ids("https://www.ozon.ru/context/detail/id/5413455528/", "wb").ozon == ["5413455528"]
 
 
+def test_yandex_market_links():
+    parsed = parse_ids(
+        "https://market.yandex.ru/card/sakharnaya-kartinka/4485111241?do-waremd5=abc&cpc=xyz\n"
+        "https://market.yandex.ru/product--naushniki/1250834536?sku=227857122946363392&cpa=1",
+        "wb",
+    )
+    assert parsed.ym == ["4485111241", "227857122946363392"]
+    assert parsed.wb == []
+
+
 def test_collect_ids_merges_both_boxes():
     merged = collect_ids({"wb": "145726284", "ozon": "5413455528, 145726284"})
     assert merged.wb == ["145726284"]
@@ -59,3 +71,62 @@ def test_parse_int_truncates():
 @pytest.mark.parametrize(("text", "expected"), [("97 K", 97000), ("1,2 тыс.", 1200), ("340", 340)])
 def test_parse_count_expands_abbreviations(text, expected):
     assert parse_count(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("2 июля", datetime(2026, 7, 2)),
+        ("27 сентября", datetime(2026, 9, 27)),
+        ("12 декабря", datetime(2025, 12, 12)),  # would be in the future → last year
+        ("12 декабря 2024", datetime(2024, 12, 12)),
+        ("· 17 сентября в 12:21", datetime(2026, 9, 17, 12, 21)),
+        ("16 сентября · Клиент", datetime(2026, 9, 16)),
+        ("вчера", datetime(2026, 9, 26)),
+        ("сегодня в 10:15", datetime(2026, 9, 27, 10, 15)),
+        ("3 часа назад", datetime(2026, 9, 27, 11, 30)),
+        ("25 минут назад", datetime(2026, 9, 27, 14, 5)),
+        ("2 дня назад", datetime(2026, 9, 25, 14, 30)),
+        ("неделю назад", datetime(2026, 9, 20, 14, 30)),
+        ("31 июня", None),
+        ("недавно", None),
+        ("", None),
+    ],
+)
+def test_parse_ru_date(text, expected):
+    assert parse_ru_date(text, now=datetime(2026, 9, 27, 14, 30, 45)) == expected
+
+
+def test_avito_links():
+    parsed = parse_ids(
+        "https://www.avito.ru/samara/predlozheniya_uslug/sedobnaya_pechat_2324430574?context=H4sI\n"
+        "https://m.avito.ru/moskva/tovary_dlya_doma/tort_1234567890\n"
+        "avito.ru/2324430574\n"
+        "https://www.avito.ru/ekaterinburg?q=сахарная+картинка&pmax=500\n"
+        "https://www.avito.ru/brands/85d0f7ed0e378f1ec24c29e566cef462",
+        "wb",
+    )
+    assert parsed.avito == [
+        "https://www.avito.ru/samara/predlozheniya_uslug/sedobnaya_pechat_2324430574",
+        "https://www.avito.ru/moskva/tovary_dlya_doma/tort_1234567890",
+        "2324430574",
+    ]
+    assert parsed.listings_for("avito") == [
+        "https://www.avito.ru/ekaterinburg?q=сахарная+картинка&pmax=500",
+        "https://www.avito.ru/brands/85d0f7ed0e378f1ec24c29e566cef462",
+    ]
+    assert parsed.count("avito") == 5
+    assert parsed.wb == []
+
+
+def test_yandex_market_listing_links():
+    parsed = parse_ids("https://market.yandex.ru/search?text=чайник&pricefrom=2000\n"
+                       "https://market.yandex.ru/catalog--elektrochainiki/54956/list?hid=90586", "ym")
+    assert parsed.ym == []
+    assert len(parsed.listings_for("ym")) == 2
+
+
+def test_collect_ids_merges_listings():
+    merged = collect_ids({"ym": "https://market.yandex.ru/search?text=a", "avito": "https://www.avito.ru/all?q=a"})
+    assert merged.listings == {"wb": [], "ozon": [], "ym": ["https://market.yandex.ru/search?text=a"],
+                               "avito": ["https://www.avito.ru/all?q=a"]}

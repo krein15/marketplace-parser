@@ -25,6 +25,13 @@ class Product:
     position: int | None = None
     image: str = ""
     url: str = ""
+    # Classifieds (Avito): where the listing is, when it was published, who sells it.
+    region: str = ""
+    address: str = ""
+    published: datetime | None = None
+    views: int | None = None
+    seller_type: str = ""
+    seller_reviews: int | None = None
     parsed_at: datetime = field(default_factory=lambda: datetime.now().replace(microsecond=0))
     # Internal: key used to fetch reviews (WB groups reviews of all colour variants under one "root").
     reviews_key: str = ""
@@ -50,3 +57,4 @@ class Review:
     photos: int = 0
     likes: int | None = None
     seller_answer: str = ""
+    seller: str = ""  # Avito reviews are about the seller, not the listing

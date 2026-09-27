@@ -43,3 +43,37 @@ def ozon_product() -> dict:
 @pytest.fixture
 def ozon_reviews() -> dict:
     return load("ozon_reviews.json")
+
+
+def load_text(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def ym_snippets() -> list:
+    return json.loads(load_text("ym_snippets.json"))
+
+
+@pytest.fixture
+def ym_card() -> str:
+    return load_text("ym_card.html")
+
+
+@pytest.fixture
+def ym_reviews() -> str:
+    return load_text("ym_reviews.html")
+
+
+@pytest.fixture
+def avito_search() -> dict:
+    return load("avito_search.json")
+
+
+@pytest.fixture
+def avito_item() -> dict:
+    return load("avito_item.json")
+
+
+@pytest.fixture
+def avito_reviews() -> list:
+    return json.loads(load_text("avito_reviews.json"))

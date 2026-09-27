@@ -60,6 +60,8 @@ class MarketplaceParser(ABC):
     title: str
     # Delay between requests, seconds (min, max). Keeps the load on the site polite.
     pause_range: tuple[float, float] = (0.3, 0.8)
+    # The site refuses to serve a headless browser: the whole run then uses a browser window.
+    needs_window: bool = False
 
     def __init__(self, browser: Browser, settings: ParseSettings, reporter: Reporter) -> None:
         self.browser = browser
@@ -82,9 +84,9 @@ class MarketplaceParser(ABC):
     async def products_by_ids(self, articles: list[str]) -> list[Product]:
         """Products by article numbers; unknown articles are reported and skipped."""
 
-    async def category(self, url: str, limit: int, sort: SortOrder) -> list[Product]:
-        """Products from a category page. Extension point for category parsing."""
-        raise NotImplementedError(f"{self.title}: сбор по категориям пока не поддерживается")
+    async def listing(self, url: str, limit: int) -> list[Product]:
+        """Products from a link to search results, a category or a shop, with the filters set in the link."""
+        raise NotImplementedError(f"{self.title}: сбор по ссылкам на выдачу пока не поддерживается")
 
     async def enrich(self, products: list[Product], field_keys: set[str]) -> None:  # noqa: B027 - optional hook
         """Fill fields that are missing from listings and require extra requests. No-op by default."""

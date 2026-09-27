@@ -10,7 +10,7 @@ from pathlib import Path
 from .browser import Browser, BrowserError
 from .export.excel import build_file_name, export_to_excel
 from .inputs import collect_ids
-from .marketplaces import PARSERS, Cancelled, ParserError, Reporter
+from .marketplaces import PARSERS, Cancelled, MarketplaceParser, ParserError, Reporter
 from .models import Product, Review
 from .settings import InputMode, ParseSettings, app_data_dir
 
@@ -30,6 +30,22 @@ class RunResult:
     started_at: datetime = field(default_factory=datetime.now)
 
 
+def _merge(products: list[Product], more: list[Product]) -> list[Product]:
+    """Append products that are not in the list yet: the same item may be found by two links."""
+    known = {p.article for p in products}
+    return products + [p for p in more if p.article not in known]
+
+
+async def _listing(parser: MarketplaceParser, link: str, limit: int, reporter: Reporter) -> list[Product]:
+    try:
+        products = await parser.listing(link, limit)
+    except NotImplementedError as exc:
+        reporter.warn(str(exc))
+        return []
+    reporter.log(f"{parser.title}: по ссылке на выдачу собрано товаров — {len(products)}")
+    return products
+
+
 async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
     result = RunResult()
     ids = collect_ids({mp: getattr(settings, f"{mp}_ids") for mp in settings.marketplaces})
@@ -40,7 +56,12 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
     share = 1 / len(settings.marketplaces)
     try:
         reporter.log("Запускаю браузер…")
-        async with Browser(app_data_dir() / "browser-profile", headless=not settings.show_browser) as browser:
+        needs_window = any(PARSERS[key].needs_window for key in settings.marketplaces)
+        if needs_window and not settings.show_browser:
+            reporter.log("Авито работает только в окне браузера — оно откроется на время сбора. "
+                         "Если сайт попросит проверку «я не робот», пройдите её в этом окне.")
+        headless = not settings.show_browser and not needs_window
+        async with Browser(app_data_dir() / "browser-profile", headless=headless) as browser:
             for index, key in enumerate(settings.marketplaces):
                 parser = PARSERS[key](browser, settings, reporter)
                 base = index * share
@@ -53,10 +74,13 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
                     if settings.mode == InputMode.QUERY:
                         products = await parser.search(settings.query.strip(), settings.max_products, settings.sort)
                     else:
-                        articles = ids.for_marketplace(key)
-                        if not articles:
+                        articles, links = ids.for_marketplace(key), ids.listings_for(key)
+                        if not articles and not links:
                             continue
-                        products = await parser.products_by_ids(articles)
+                        products = await parser.products_by_ids(articles) if articles else []
+                        for link in links:
+                            products = _merge(products, await _listing(parser, link, settings.max_products,
+                                                                       reporter))
                     reporter.log(f"{parser.title}: собрано товаров — {len(products)}")
                     result.products += products
 

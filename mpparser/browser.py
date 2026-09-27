@@ -112,6 +112,18 @@ class Browser:
     async def new_page(self) -> Page:
         return await self.context.new_page()
 
+    async def bring_to_front(self, page: Page) -> None:
+        """Show the window of ``page`` to the user, restoring it if it is minimized."""
+        try:
+            session = await self.context.new_cdp_session(page)
+            window = await session.send("Browser.getWindowForTarget")
+            await session.send("Browser.setWindowBounds",
+                               {"windowId": window["windowId"], "bounds": {"windowState": "normal"}})
+            await session.detach()
+        except Exception:  # headless browsers have no window; bring_to_front below is enough then
+            log.debug("Could not restore the browser window", exc_info=True)
+        await page.bring_to_front()
+
     async def fetch(
         self, page: Page, url: str, headers: dict[str, str] | None = None, timeout: float = 30
     ) -> tuple[int, str]:
