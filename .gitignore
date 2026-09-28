@@ -7,3 +7,4 @@ dist/
 .pytest_cache/
 *.xlsx
 !docs/**/*.xlsx
+*.egg-info/

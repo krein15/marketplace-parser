@@ -1,3 +1,0 @@
-patchright
-customtkinter
-openpyxl
