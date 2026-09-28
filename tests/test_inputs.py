@@ -98,28 +98,6 @@ def test_parse_ru_date(text, expected):
     assert parse_ru_date(text, now=datetime(2026, 9, 27, 14, 30, 45)) == expected
 
 
-def test_avito_links():
-    parsed = parse_ids(
-        "https://www.avito.ru/samara/predlozheniya_uslug/sedobnaya_pechat_2324430574?context=H4sI\n"
-        "https://m.avito.ru/moskva/tovary_dlya_doma/tort_1234567890\n"
-        "avito.ru/2324430574\n"
-        "https://www.avito.ru/ekaterinburg?q=сахарная+картинка&pmax=500\n"
-        "https://www.avito.ru/brands/85d0f7ed0e378f1ec24c29e566cef462",
-        "wb",
-    )
-    assert parsed.for_marketplace("avito") == [
-        "https://www.avito.ru/samara/predlozheniya_uslug/sedobnaya_pechat_2324430574",
-        "https://www.avito.ru/moskva/tovary_dlya_doma/tort_1234567890",
-        "2324430574",
-    ]
-    assert parsed.listings_for("avito") == [
-        "https://www.avito.ru/ekaterinburg?q=сахарная+картинка&pmax=500",
-        "https://www.avito.ru/brands/85d0f7ed0e378f1ec24c29e566cef462",
-    ]
-    assert parsed.count("avito") == 5
-    assert parsed.for_marketplace("wb") == []
-
-
 def test_yandex_market_listing_links():
     parsed = parse_ids("https://market.yandex.ru/search?text=чайник&pricefrom=2000\n"
                        "https://market.yandex.ru/catalog--elektrochainiki/54956/list?hid=90586", "ym")
@@ -128,6 +106,6 @@ def test_yandex_market_listing_links():
 
 
 def test_collect_ids_merges_listings():
-    merged = collect_ids({"ym": "https://market.yandex.ru/search?text=a", "avito": "https://www.avito.ru/all?q=a"})
-    assert merged.listings == {"ym": ["https://market.yandex.ru/search?text=a"],
-                               "avito": ["https://www.avito.ru/all?q=a"]}
+    merged = collect_ids({"ym": "https://market.yandex.ru/search?text=a https://market.yandex.ru/catalog--x/1"})
+    assert merged.listings == {"ym": ["https://market.yandex.ru/search?text=a",
+                                      "https://market.yandex.ru/catalog--x/1"]}

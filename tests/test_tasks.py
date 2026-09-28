@@ -81,7 +81,7 @@ def test_schedule_creates_a_daily_entry(monkeypatch):
     fake = FakeSchtasks()
     scheduler.schedule("Чайники", "09:00", run=fake)
     assert fake.calls == [["schtasks", "/Create", "/F", "/SC", "DAILY", "/ST", "09:00",
-                           "/TN", "Marketplace Parser v2\\Чайники",
+                           "/TN", "Marketplace Parser\\Чайники",
                            "/TR", '"C:\\MP\\MarketplaceParser.exe" --task "Чайники"']]
 
 

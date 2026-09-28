@@ -1,0 +1,40 @@
+name: Тесты
+
+on:
+  push:
+    branches: [main, v2]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: pytest и ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Линтер
+        run: ruff check .
+
+      - name: Тесты
+        # Парсеры проверяются на сохранённых ответах площадок: интернет и браузер не нужны.
+        run: pytest -q --junit-xml=test-results.xml
+
+      - name: Отчёт о тестах
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: test-results.xml
+          check_name: Результаты тестов
+          fail_on_failure: true

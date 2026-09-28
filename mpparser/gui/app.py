@@ -13,7 +13,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tkinter import filedialog, messagebox
-from typing import Any
+from typing import Any, ClassVar
 
 import customtkinter as ctk
 
@@ -117,7 +117,8 @@ class App(ctk.CTk):
         titles = ctk.CTkFrame(header, fg_color="transparent")
         titles.pack(side="left", padx=12)
         ctk.CTkLabel(titles, text=APP_NAME, font=theme.font(21, "bold"), text_color=theme.TEXT).pack(anchor="w")
-        ctk.CTkLabel(titles, text="Товары, цены и отзывы с Wildberries, Ozon, Яндекс Маркета и Авито в Excel",
+        names = ", ".join(mp.title for mp in self.marketplaces.values())
+        ctk.CTkLabel(titles, text=f"Товары, цены и отзывы в Excel: {names}",
                      font=theme.font(13), text_color=theme.TEXT_MUTED).pack(anchor="w")
 
         self.appearance = ctk.CTkSegmentedButton(
@@ -218,43 +219,63 @@ class App(ctk.CTk):
 
     def _build_filters(self, parent: ctk.CTkBaseClass) -> None:
         common = SectionCard(parent, None, "Для всех площадок",
-                             hint="Другие фильтры — бренд, категорию, магазин — настройте на сайте и вставьте ссылку "
-                                  "на выдачу на вкладке «Сбор» в режиме «Артикулы и ссылки».")
-        common.pack(fill="x", pady=(0, 10))
+                             hint="Цена сравнивается с той, что на сайте крупно: у Ozon и Маркета — с ценой по карте. "
+                                  "Бренд, категорию или магазин задайте на сайте и вставьте ссылку на выдачу "
+                                  "на вкладке «Сбор».")
+        common.pack(fill="x", pady=(0, 8))
         row = ctk.CTkFrame(common.body, fg_color="transparent")
         row.pack(fill="x")
         ctk.CTkLabel(row, text="Цена, ₽", font=theme.font(13), text_color=theme.TEXT).pack(side="left", padx=(0, 12))
         self.price_min = self._entry(row, "от", self.settings.price_min)
         self.price_min.pack(side="left", padx=(0, 8))
         self.price_max = self._entry(row, "до", self.settings.price_max)
-        self.price_max.pack(side="left", padx=(0, 12))
-        ctk.CTkLabel(row, text="Ozon и Маркет сравнивают с ценой\nпо карте / с Пэй", font=theme.font(11),
-                     text_color=theme.TEXT_MUTED, justify="left").pack(side="left")
+        self.price_max.pack(side="left")
 
         # A card per marketplace, built from the filters it declares — the window knows none of them by name.
+        # Two cards per row, so that four marketplaces still fit on screen without scrolling.
         self.option_widgets: dict[tuple[str, str], Any] = {}
         self.option_values: dict[tuple[str, str], list[str]] = {}
         self.option_labels: dict[tuple[str, str], ctk.CTkLabel] = {}
-        for marketplace in plugins.with_options():
-            self._build_marketplace_filters(parent, marketplace)
-
-    def _build_marketplace_filters(self, parent: ctk.CTkBaseClass, marketplace: Marketplace) -> None:
-        card = SectionCard(parent, None, marketplace.title, hint=marketplace.notes)
-        card.pack(fill="x", pady=(0, 10))
-        wide = [o for o in marketplace.options if o.kind in ("multi", "choice", "setup")]
-        switches = [o for o in marketplace.options if o.kind == "switch"]
-        if wide:
+        setups = [(mp, option) for mp in plugins.with_options() for option in mp.options if option.kind == "setup"]
+        if setups:
+            card = SectionCard(parent, None, "Адрес доставки на сайте",
+                               hint="Регион берётся из адреса в браузере парсера; Маркет — после входа в аккаунт.")
+            card.pack(fill="x", pady=(0, 8))
             row = ctk.CTkFrame(card.body, fg_color="transparent")
             row.pack(fill="x")
-            for option in wide:
-                self._build_option(row, marketplace, option)
-        if switches:
-            row = ctk.CTkFrame(card.body, fg_color="transparent")
-            row.pack(fill="x", pady=(12, 0) if wide else (0, 0))
-            for option in switches:
-                self._build_option(row, marketplace, option)
+            for marketplace, option in setups:
+                self._build_option(row, marketplace, option, with_title=True)
 
-    def _build_option(self, row: ctk.CTkFrame, marketplace: Marketplace, option: Option) -> None:
+        with_filters = [mp for mp in plugins.with_options()
+                        if any(option.kind != "setup" for option in mp.options)]
+        grid = ctk.CTkFrame(parent, fg_color="transparent")
+        grid.pack(fill="both", expand=True)
+        grid.grid_columnconfigure((0, 1), weight=1, uniform="filters")
+        for number, marketplace in enumerate(with_filters):
+            self._build_marketplace_filters(grid, marketplace, row=number // 2, column=number % 2)
+
+    # A filter card takes half of the window width; this is how much of it one control needs.
+    CARD_WIDTH = 340
+    OPTION_WIDTHS: ClassVar[dict[str, int]] = {"multi": 320, "switch": 150}
+
+    def _build_marketplace_filters(self, parent: ctk.CTkBaseClass, marketplace: Marketplace,
+                                   row: int, column: int) -> None:
+        card = SectionCard(parent, None, marketplace.title, hint=marketplace.notes)
+        card.grid(row=row, column=column, sticky="new", padx=(0, 5) if column == 0 else (5, 0), pady=(0, 8))
+        # Controls flow left to right and wrap to the next line when the card runs out of width.
+        options = [o for o in marketplace.options if o.kind != "setup"]
+        line, used = None, 0.0
+        for option in options:
+            width = self.OPTION_WIDTHS.get(option.kind, option.width + 24)
+            if line is None or used + width > self.CARD_WIDTH:
+                line = ctk.CTkFrame(card.body, fg_color="transparent")
+                line.pack(fill="x", pady=(0, 0) if used == 0 else (8, 0))
+                used = 0
+            self._build_option(line, marketplace, option)
+            used += width
+
+    def _build_option(self, row: ctk.CTkFrame, marketplace: Marketplace, option: Option,
+                      with_title: bool = False) -> None:
         """One filter widget: a switch, a menu, a list of places, or a button that opens the site."""
         address = (marketplace.key, option.key)
         value = self.settings.option(marketplace.key, option.key)
@@ -269,14 +290,14 @@ class App(ctk.CTk):
         elif option.kind == "multi":
             box = ctk.CTkFrame(row, fg_color="transparent")
             box.pack(side="left", fill="x", expand=True, padx=(0, 18))
-            ctk.CTkLabel(box, text=option.hint or f"{option.title} (поиск идёт по каждому)", font=theme.font(12),
-                         text_color=theme.TEXT_MUTED).pack(anchor="w")
+            ctk.CTkLabel(box, text=option.hint or f"{option.title} (поиск идёт по каждому)", justify="left",
+                         font=theme.font(12), wraplength=230, text_color=theme.TEXT_MUTED).pack(anchor="w")
             pick = ctk.CTkFrame(box, fg_color="transparent")
             pick.pack(fill="x", pady=(4, 0))
             button = neutral_button(pick, "Выбрать…", lambda: self._pick_locations(marketplace, option), width=110)
             button.pack(side="left", padx=(0, 10))
             label = ctk.CTkLabel(pick, text="", font=theme.font(13), text_color=theme.TEXT, anchor="w",
-                                 justify="left", wraplength=330)
+                                 justify="left", wraplength=200)
             label.pack(side="left", fill="x", expand=True)
             self.option_widgets[address] = button
             self.option_labels[address] = label
@@ -284,9 +305,13 @@ class App(ctk.CTk):
             self._show_locations(marketplace, option)
         elif option.kind == "setup":
             box = ctk.CTkFrame(row, fg_color="transparent")
-            box.pack(side="right")
-            ctk.CTkLabel(box, text=option.hint or option.title, font=theme.font(12),
-                         text_color=theme.TEXT_MUTED).pack(anchor="w")
+            box.pack(side="left", padx=(0, 28))
+            # In the shared card the marketplace name is enough; on its own the option explains itself.
+            caption = marketplace.title if with_title else (option.hint or option.title)
+            color = marketplace.color if with_title else theme.TEXT_MUTED
+            font = theme.font(13, "bold") if with_title else theme.font(12)
+            ctk.CTkLabel(box, text=caption, font=font, justify="left", wraplength=230,
+                         text_color=color).pack(anchor="w")
             button = neutral_button(box, option.button, lambda: self._open_option_setup(marketplace, option),
                                     width=option.width)
             button.pack(anchor="w", pady=(4, 0))

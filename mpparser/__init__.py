@@ -1,6 +1,10 @@
-"""Marketplace Parser v2: products, prices and reviews from Wildberries, Ozon, Yandex Market and Avito into Excel."""
+"""Marketplace Parser: products, prices and reviews from marketplaces into Excel.
 
-__version__ = "2.0.0.dev0"
-# Working name of the paid edition. It also names the data folder (%LOCALAPPDATA%\MarketplaceParserv2),
-# which keeps settings and the browser profile apart from the free edition installed on the same PC.
-APP_NAME = "Marketplace Parser v2"
+Wildberries, Ozon and Yandex Market come with the program; other marketplaces are installed as plugins
+(see ``mpparser/plugins.py``).
+"""
+
+__version__ = "2.0.0"
+# Also names the data folder (%LOCALAPPDATA%\MarketplaceParser), where settings, saved tasks,
+# the price history and the browser profile are kept.
+APP_NAME = "Marketplace Parser"
