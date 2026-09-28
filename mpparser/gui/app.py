@@ -217,10 +217,12 @@ class App(ctk.CTk):
         self.max_reviews.pack(side="left", padx=(24, 0))
         self._refresh_reviews_state()
 
-    def _build_filters(self, parent: ctk.CTkBaseClass) -> None:
+    def _build_filters(self, tab: ctk.CTkBaseClass) -> None:
+        # The number of marketplaces is not fixed, so this tab is the one place where scrolling is needed.
+        parent = ctk.CTkScrollableFrame(tab, fg_color="transparent", scrollbar_button_color=theme.CARD_BORDER)
+        parent.pack(fill="both", expand=True)
         common = SectionCard(parent, None, "Для всех площадок",
-                             hint="Цена сравнивается с той, что на сайте крупно: у Ozon и Маркета — с ценой по карте. "
-                                  "Бренд, категорию или магазин задайте на сайте и вставьте ссылку на выдачу "
+                             hint="Бренд, категорию или магазин задайте на сайте и вставьте ссылку на выдачу "
                                   "на вкладке «Сбор».")
         common.pack(fill="x", pady=(0, 8))
         row = ctk.CTkFrame(common.body, fg_color="transparent")
@@ -236,22 +238,26 @@ class App(ctk.CTk):
         self.option_widgets: dict[tuple[str, str], Any] = {}
         self.option_values: dict[tuple[str, str], list[str]] = {}
         self.option_labels: dict[tuple[str, str], ctk.CTkLabel] = {}
+        grid = ctk.CTkFrame(parent, fg_color="transparent")
+        grid.pack(fill="both", expand=True)
+        grid.grid_columnconfigure((0, 1), weight=1, uniform="filters")
+        cell = 0
+
+        # Buttons that open the site live together: for the user it is one and the same action.
         setups = [(mp, option) for mp in plugins.with_options() for option in mp.options if option.kind == "setup"]
         if setups:
-            card = SectionCard(parent, None, "Адрес доставки на сайте",
-                               hint="Регион берётся из адреса в браузере парсера; Маркет — после входа в аккаунт.")
-            card.pack(fill="x", pady=(0, 8))
+            card = SectionCard(grid, None, "Адрес доставки на сайте",
+                               hint="Берётся из адреса в браузере парсера; Маркет — после входа в аккаунт.")
+            card.grid(row=0, column=0, columnspan=2, sticky="new", pady=(0, 8))
             row = ctk.CTkFrame(card.body, fg_color="transparent")
             row.pack(fill="x")
             for marketplace, option in setups:
                 self._build_option(row, marketplace, option, with_title=True)
+            cell = 2  # the card spans both columns, so the marketplaces start on the next row
 
         with_filters = [mp for mp in plugins.with_options()
                         if any(option.kind != "setup" for option in mp.options)]
-        grid = ctk.CTkFrame(parent, fg_color="transparent")
-        grid.pack(fill="both", expand=True)
-        grid.grid_columnconfigure((0, 1), weight=1, uniform="filters")
-        for number, marketplace in enumerate(with_filters):
+        for number, marketplace in enumerate(with_filters, start=cell):
             self._build_marketplace_filters(grid, marketplace, row=number // 2, column=number % 2)
 
     # A filter card takes half of the window width; this is how much of it one control needs.
