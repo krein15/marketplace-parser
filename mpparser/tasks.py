@@ -14,7 +14,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .settings import MARKETPLACE_SHORT, InputMode, ParseSettings, app_data_dir
+from . import plugins
+from .settings import InputMode, ParseSettings, app_data_dir
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ class Task:
     def describe(self) -> str:
         """One line for the task list: "ЯМ+Авито · «чайник» · каждый день в 09:00"."""
         settings = self.settings
-        parts = ["+".join(MARKETPLACE_SHORT.get(k, k) for k in settings.marketplaces)]
+        short = plugins.short_titles()
+        parts = ["+".join(short.get(k, k) for k in settings.marketplaces)]
         parts.append(f"«{settings.query}»" if settings.mode == InputMode.QUERY else "ссылки и артикулы")
         parts.append(f"каждый день в {self.time}" if self.time else "вручную")
         return " · ".join(parts)

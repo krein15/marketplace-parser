@@ -26,14 +26,22 @@ from urllib.parse import quote, urlencode
 
 from patchright.async_api import Page
 
-from ..fields import YM_DETAIL_FIELDS
 from ..models import Product, Review
+from ..plugins import Marketplace, Option
 from ..settings import ParseSettings, SortOrder
 from ..textutils import parse_float, parse_int, parse_ru_date
 from .base import MarketplaceParser, ParserError
 
 SITE = "https://market.yandex.ru"
 TITLE = "Яндекс Маркет"
+# A link to one product: /card/<slug>/<sku>, or an older /product--<slug>/<model>?sku=<sku>
+ITEM_LINK = re.compile(
+    r"market\.yandex\.[a-z]{2,3}/(?:card/[^/?#\s]+/(\d{5,})|[^\s]*?[?&]sku=(\d{5,}))", re.IGNORECASE
+)
+# Any other Market link (search results, a category, a shop) is collected like a search query.
+LISTING_LINK = re.compile(r"^(?:https?://)?(?:m\.)?market\.yandex\.[a-z]{2,3}/\S+", re.IGNORECASE)
+# Search results carry prices and rating only: brand, seller and category are on the card.
+DETAIL_FIELDS = {"brand", "seller", "seller_rating", "category"}
 SORTS = {
     SortOrder.POPULAR: None,
     SortOrder.PRICE_ASC: "aprice",
@@ -111,10 +119,10 @@ def filter_params(settings: ParseSettings) -> dict[str, str]:
         params["pricefrom"] = str(settings.price_min)
     if settings.price_max is not None:
         params["priceto"] = str(settings.price_max)
-    if settings.ym_rating_4:
+    if settings.option("ym", "rating_4"):
         params["qrfrom"] = "1"
-    if settings.ym_delivery_days:
-        params["delivery-interval"] = str(settings.ym_delivery_days)
+    if days := settings.option("ym", "delivery_days"):
+        params["delivery-interval"] = str(days)
     return params
 
 
@@ -411,7 +419,7 @@ class YandexMarketParser(MarketplaceParser):
 
     async def enrich(self, products: list[Product], field_keys: set[str]) -> None:
         """Search results lack brand, seller and category: open the cards if those fields are wanted."""
-        if not field_keys & YM_DETAIL_FIELDS:
+        if not field_keys & DETAIL_FIELDS:
             return
         pending = [p for p in products if not p.seller]
         for index, product in enumerate(pending, 1):
@@ -438,3 +446,40 @@ class YandexMarketParser(MarketplaceParser):
             page_number += 1
             await self.pause()
         return reviews
+
+
+MARKETPLACE = Marketplace(
+    key="ym",
+    title=TITLE,
+    short_title="ЯМ",
+    site="market.yandex.ru",
+    color=("#E0461A", "#FF6A3D"),
+    excel_color="E0461A",
+    parser=YandexMarketParser,
+    ids_placeholder="4485111241\nhttps://market.yandex.ru/card/…/4485111241\nссылка на выдачу с фильтрами",
+    item_patterns=(ITEM_LINK,),
+    listing_pattern=LISTING_LINK,
+    filters_label="Фильтры Маркета",
+    options=(
+        Option(key="rating_4", title="Рейтинг от 4.0", summary_text="рейтинг от 4.0", own_row=False),
+        Option(
+            key="delivery_days",
+            title="Срок доставки",
+            kind="choice",
+            default=0,
+            choices=((0, "Любой"), (3, "До 3 дней"), (7, "До 7 дней")),
+            own_row=False,
+            cli_metavar="ДНЕЙ",
+        ),
+        Option(
+            key="address",
+            title="Регион Маркета",
+            kind="setup",
+            hint="Регион: по IP или адресу в аккаунте",
+            url=SITE + "/",
+            instruction="Войдите в аккаунт Яндекса и укажите регион доставки, затем закройте окно браузера — "
+                        "регион сохранится для следующих запусков.",
+        ),
+    ),
+    order=30,
+)

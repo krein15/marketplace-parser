@@ -18,9 +18,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import plugins
 from .inputs import collect_ids
 from .models import Product
-from .settings import MARKETPLACES, InputMode, ParseSettings
+from .settings import InputMode, ParseSettings
 
 log = logging.getLogger(__name__)
 
@@ -69,14 +70,20 @@ def job_key(settings: ParseSettings) -> str:
             "query": " ".join(settings.query.lower().split()),
             "sort": str(settings.sort),
             "limit": settings.max_products,
-            "wb_region": settings.region if "wb" in settings.marketplaces else "",
-            "avito_locations": sorted(settings.avito_locations) if "avito" in settings.marketplaces else [],
         }
     else:
-        what["ids"] = {key: " ".join(getattr(settings, f"{key}_ids").split()) for key in settings.marketplaces}
+        what["ids"] = {key: " ".join(settings.ids_text(key).split()) for key in settings.marketplaces}
         what["limit"] = settings.max_products
-    what["filters"] = [settings.price_min, settings.price_max, settings.ym_rating_4, settings.ym_delivery_days,
-                       str(settings.avito_seller), settings.avito_delivery, settings.avito_title_only]
+    # Filters of the selected marketplaces, whatever they are: a different filter means a different history.
+    options = {}
+    for key in settings.marketplaces:
+        marketplace = plugins.get(key)
+        for option in marketplace.options if marketplace else ():
+            if option.kind == "setup" or (option.query_only and settings.mode != InputMode.QUERY):
+                continue
+            value = settings.option(key, option.key)
+            options[f"{key}.{option.key}"] = sorted(value) if isinstance(value, list) else value
+    what["filters"] = [settings.price_min, settings.price_max, options]
     digest = hashlib.sha1(json.dumps(what, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return f"run:{digest[:16]}"
 
@@ -238,11 +245,11 @@ class History:
 def update_history(path: Path, settings: ParseSettings, started_at: datetime, completed: Sequence[str],
                    products: Sequence[Product]) -> tuple[Comparison, Dynamics]:
     """Compare with the previous run of the same job, then record this one. ``completed`` — marketplace keys."""
-    titles = [MARKETPLACES[key] for key in completed]
+    titles = [plugins.title_of(key) for key in completed]
     history = History(path)
     job = job_key(settings)
     comparison = compare(history.previous(job), products, titles)
-    links = collect_ids({key: getattr(settings, f"{key}_ids") for key in settings.marketplaces}).listings
+    links = collect_ids({key: settings.ids_text(key) for key in settings.marketplaces}).listings
     comparison.search = settings.mode == InputMode.QUERY or any(links.values())
     history.record(job, started_at, titles, products)
     return comparison, history.dynamics(job, [p for p in products if p.marketplace in titles])

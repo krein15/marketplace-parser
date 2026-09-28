@@ -16,28 +16,29 @@ def test_links_go_to_their_marketplace_regardless_of_the_box():
         "https://www.wildberries.ru/catalog/145726284/detail.aspx?size=1",
         "wb",
     )
-    assert parsed.wb == ["145726284"]
-    assert parsed.ozon == ["5413455528"]
+    assert parsed.for_marketplace("wb") == ["145726284"]
+    assert parsed.for_marketplace("ozon") == ["5413455528"]
 
 
 def test_bare_numbers_belong_to_the_selected_marketplace():
-    assert parse_ids("145726284, 839226871", "wb").wb == ["145726284", "839226871"]
-    assert parse_ids("145726284 839226871", "ozon").ozon == ["145726284", "839226871"]
+    assert parse_ids("145726284, 839226871", "wb").for_marketplace("wb") == ["145726284", "839226871"]
+    assert parse_ids("145726284 839226871", "ozon").for_marketplace("ozon") == ["145726284", "839226871"]
 
 
 def test_duplicates_are_removed_and_order_kept():
     parsed = parse_ids("111111\n222222\n111111\nhttps://www.wildberries.ru/catalog/222222/detail.aspx", "wb")
-    assert parsed.wb == ["111111", "222222"]
+    assert parsed.for_marketplace("wb") == ["111111", "222222"]
 
 
 def test_unrecognised_tokens_are_reported():
     parsed = parse_ids("наушники, 12, https://example.com/product/123", "wb")
-    assert parsed.wb == []
+    assert parsed.for_marketplace("wb") == []
     assert parsed.invalid == ["наушники", "12", "https://example.com/product/123"]
 
 
 def test_old_ozon_link_format():
-    assert parse_ids("https://www.ozon.ru/context/detail/id/5413455528/", "wb").ozon == ["5413455528"]
+    parsed = parse_ids("https://www.ozon.ru/context/detail/id/5413455528/", "wb")
+    assert parsed.for_marketplace("ozon") == ["5413455528"]
 
 
 def test_yandex_market_links():
@@ -46,14 +47,14 @@ def test_yandex_market_links():
         "https://market.yandex.ru/product--naushniki/1250834536?sku=227857122946363392&cpa=1",
         "wb",
     )
-    assert parsed.ym == ["4485111241", "227857122946363392"]
-    assert parsed.wb == []
+    assert parsed.for_marketplace("ym") == ["4485111241", "227857122946363392"]
+    assert parsed.for_marketplace("wb") == []
 
 
 def test_collect_ids_merges_both_boxes():
     merged = collect_ids({"wb": "145726284", "ozon": "5413455528, 145726284"})
-    assert merged.wb == ["145726284"]
-    assert merged.ozon == ["5413455528", "145726284"]
+    assert merged.for_marketplace("wb") == ["145726284"]
+    assert merged.for_marketplace("ozon") == ["5413455528", "145726284"]
 
 
 @pytest.mark.parametrize(
@@ -106,7 +107,7 @@ def test_avito_links():
         "https://www.avito.ru/brands/85d0f7ed0e378f1ec24c29e566cef462",
         "wb",
     )
-    assert parsed.avito == [
+    assert parsed.for_marketplace("avito") == [
         "https://www.avito.ru/samara/predlozheniya_uslug/sedobnaya_pechat_2324430574",
         "https://www.avito.ru/moskva/tovary_dlya_doma/tort_1234567890",
         "2324430574",
@@ -116,17 +117,17 @@ def test_avito_links():
         "https://www.avito.ru/brands/85d0f7ed0e378f1ec24c29e566cef462",
     ]
     assert parsed.count("avito") == 5
-    assert parsed.wb == []
+    assert parsed.for_marketplace("wb") == []
 
 
 def test_yandex_market_listing_links():
     parsed = parse_ids("https://market.yandex.ru/search?text=чайник&pricefrom=2000\n"
                        "https://market.yandex.ru/catalog--elektrochainiki/54956/list?hid=90586", "ym")
-    assert parsed.ym == []
+    assert parsed.for_marketplace("ym") == []
     assert len(parsed.listings_for("ym")) == 2
 
 
 def test_collect_ids_merges_listings():
     merged = collect_ids({"ym": "https://market.yandex.ru/search?text=a", "avito": "https://www.avito.ru/all?q=a"})
-    assert merged.listings == {"wb": [], "ozon": [], "ym": ["https://market.yandex.ru/search?text=a"],
+    assert merged.listings == {"ym": ["https://market.yandex.ru/search?text=a"],
                                "avito": ["https://www.avito.ru/all?q=a"]}

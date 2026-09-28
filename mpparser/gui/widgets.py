@@ -32,9 +32,8 @@ class SectionCard(ctk.CTkFrame):
 class MarketplaceToggle(ctk.CTkFrame):
     """A marketplace on/off card in the marketplace's brand colour."""
 
-    def __init__(self, master: ctk.CTkBaseClass, key: str, title: str,
+    def __init__(self, master: ctk.CTkBaseClass, color: tuple[str, str], title: str,
                  variable: ctk.BooleanVar, command: Callable[[], None]) -> None:
-        color = theme.MARKETPLACE_COLORS[key]
         super().__init__(master, fg_color=theme.INPUT_BG, corner_radius=12, border_width=2, border_color=color)
         self._color = color
         self._variable = variable

@@ -1,9 +1,16 @@
 [project]
-name = "marketplace-parser-pro"
-version = "2.0.0.dev0"
+name = "mpparser"
+version = "2.0.0"
 description = "Collects products, prices and reviews from Wildberries, Ozon and Yandex Market into Excel"
 requires-python = ">=3.12"
 dependencies = ["patchright", "customtkinter", "openpyxl"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mpparser*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -23,5 +30,5 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG001"]
+"tests/*" = ["ARG001", "ARG002"]  # stub parsers in tests do not use their arguments
 "tools/*" = ["T201"]

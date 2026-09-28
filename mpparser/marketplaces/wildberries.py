@@ -19,11 +19,16 @@ from urllib.parse import quote, urlencode
 from patchright.async_api import Page, Request
 
 from ..models import Product, Review
-from ..regions import wb_dest
+from ..plugins import Marketplace, Option
+from ..regions import DEFAULT_REGION, WB_REGIONS, wb_dest
 from ..settings import SortOrder
 from .base import MarketplaceParser, ParserError
 
 SITE = "https://www.wildberries.ru"
+# A link to one product: wildberries.ru/catalog/<article>/detail.aspx
+ITEM_LINK = re.compile(r"(?:wildberries\.[a-z]{2,3}|wb\.ru)/catalog/(\d{4,})", re.IGNORECASE)
+# The search results do not include the category: it is read from the product card on the CDN.
+DETAIL_FIELDS = {"category"}
 SEARCH_PATH = "/__internal/u-search/exactmatch/ru/common/v18/search"  # refreshed from live traffic
 DETAIL_PATH = "/__internal/u-card/cards/v4/detail"
 FEEDBACK_HOSTS = ("https://feedbacks1.wb.ru", "https://feedbacks2.wb.ru")
@@ -199,7 +204,7 @@ class WildberriesParser(MarketplaceParser):
         raise ParserError(f"Wildberries: сервер ответил ошибкой {status}")
 
     def _dest(self) -> int:
-        return wb_dest(self.settings.region)
+        return wb_dest(self.option("region"))
 
     async def search(self, query: str, limit: int, sort: SortOrder) -> list[Product]:
         products: list[Product] = []
@@ -300,3 +305,30 @@ class WildberriesParser(MarketplaceParser):
                 break
         items = sorted((data or {}).get("feedbacks") or [], key=lambda f: f.get("createdDate", ""), reverse=True)
         return [parse_feedback(item, product) for item in items[:limit]]
+
+
+MARKETPLACE = Marketplace(
+    key="wb",
+    title="Wildberries",
+    short_title="WB",
+    site="wildberries.ru",
+    color=("#A20D8A", "#CB11AB"),
+    excel_color="A20D8A",
+    parser=WildberriesParser,
+    ids_placeholder="145726284\nhttps://www.wildberries.ru/catalog/839226871/detail.aspx",
+    item_patterns=(ITEM_LINK,),
+    options=(
+        Option(
+            key="region",
+            title="Регион доставки",
+            kind="choice",
+            default=DEFAULT_REGION,
+            choices=tuple((name, name) for name in WB_REGIONS),
+            width=180,
+            label="Регион WB",
+            always_in_summary=True,
+            hint="Цены, наличие и сроки зависят от города",
+        ),
+    ),
+    order=10,
+)

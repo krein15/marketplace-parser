@@ -1,8 +1,9 @@
 """Parsing of user-supplied lists: article numbers, product links and links to search results.
 
-A link to a single product becomes an article number (for Avito: the listing URL). A link to a list of products —
-search results, a category, a shop or a seller page with filters already set on the site — goes to ``listings``
-and is collected like a search query.
+Which link belongs to which marketplace is decided by the marketplaces themselves: each one declares its
+patterns in its :class:`~mpparser.plugins.Marketplace` description. A link to a single product becomes an
+article number; a link to a list of products — search results, a category, a shop or a seller page with
+filters already set on the site — goes to ``listings`` and is collected like a search query.
 """
 
 from __future__ import annotations
@@ -10,35 +11,20 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-WB_LINK = re.compile(r"(?:wildberries\.[a-z]{2,3}|wb\.ru)/catalog/(\d{4,})", re.IGNORECASE)
-OZON_LINK = re.compile(r"ozon\.[a-z]{2,3}/(?:product|context/detail/id)/(?:[^/?#\s]*-)?(\d{5,})", re.IGNORECASE)
-# Yandex Market: /card/<slug>/<sku> or an older /product--<slug>/<model>?sku=<sku> link.
-YM_LINK = re.compile(
-    r"market\.yandex\.[a-z]{2,3}/(?:card/[^/?#\s]+/(\d{5,})|[^\s]*?[?&]sku=(\d{5,}))", re.IGNORECASE
-)
-YM_ANY = re.compile(r"^(?:https?://)?(?:m\.)?market\.yandex\.[a-z]{2,3}/\S+", re.IGNORECASE)
-# Avito listing: avito.ru/<location>/<category>/<title>_<id>, or the short avito.ru/<id>.
-AVITO_ITEM = re.compile(
-    r"^(?:https?://)?(?:www\.|m\.)?avito\.ru/(?:[^/?#\s]+/[^/?#\s]+/[^/?#\s]*_(\d{6,})|(\d{6,}))/?(?:[?#]\S*)?$",
-    re.IGNORECASE,
-)
-AVITO_ANY = re.compile(r"^(?:https?://)?(?:www\.|m\.)?avito\.ru/\S+", re.IGNORECASE)
+from . import plugins
+
 NUMBER = re.compile(r"^\d{4,}$")
 SEPARATORS = re.compile(r"[\s,;]+")
-MARKETPLACE_KEYS = ("wb", "ozon", "ym", "avito")
 
 
 @dataclass
 class ParsedIds:
-    wb: list[str] = field(default_factory=list)
-    ozon: list[str] = field(default_factory=list)
-    ym: list[str] = field(default_factory=list)
-    avito: list[str] = field(default_factory=list)
-    listings: dict[str, list[str]] = field(default_factory=dict)
+    items: dict[str, list[str]] = field(default_factory=dict)  # marketplace key → article numbers
+    listings: dict[str, list[str]] = field(default_factory=dict)  # marketplace key → links to search results
     invalid: list[str] = field(default_factory=list)
 
     def for_marketplace(self, key: str) -> list[str]:
-        return getattr(self, key)
+        return self.items.get(key, [])
 
     def listings_for(self, key: str) -> list[str]:
         return self.listings.get(key, [])
@@ -46,15 +32,12 @@ class ParsedIds:
     def count(self, key: str) -> int:
         return len(self.for_marketplace(key)) + len(self.listings_for(key))
 
+    def total(self) -> int:
+        return sum(self.count(key) for key in {*self.items, *self.listings})
+
 
 def _full_url(link: str) -> str:
     return link if link.lower().startswith("http") else "https://" + link
-
-
-def avito_item_url(link: str) -> str:
-    """Listing URL without tracking parameters, on the desktop host."""
-    path = re.sub(r"^(?:https?://)?(?:www\.|m\.)?avito\.ru", "", link, flags=re.IGNORECASE).split("?", 1)[0]
-    return "https://www.avito.ru" + path.split("#", 1)[0].rstrip("/")
 
 
 def parse_ids(text: str, default_marketplace: str) -> ParsedIds:
@@ -65,11 +48,12 @@ def parse_ids(text: str, default_marketplace: str) -> ParsedIds:
     """
     result = ParsedIds()
     seen: set[tuple[str, str]] = set()
+    marketplaces = plugins.registry().values()
 
     def add(marketplace: str, article: str) -> None:
         if (marketplace, article) not in seen:
             seen.add((marketplace, article))
-            result.for_marketplace(marketplace).append(article)
+            result.items.setdefault(marketplace, []).append(article)
 
     def add_listing(marketplace: str, link: str) -> None:
         url = _full_url(link)
@@ -80,22 +64,18 @@ def parse_ids(text: str, default_marketplace: str) -> ParsedIds:
     for token in SEPARATORS.split(text.strip()):
         if not token:
             continue
-        if match := WB_LINK.search(token):
-            add("wb", match.group(1))
-        elif match := OZON_LINK.search(token):
-            add("ozon", match.group(1))
-        elif match := YM_LINK.search(token):
-            add("ym", match.group(1) or match.group(2))
-        elif YM_ANY.match(token):
-            add_listing("ym", token)
-        elif match := AVITO_ITEM.match(token):
-            add("avito", avito_item_url(token) if match.group(1) else match.group(2))
-        elif AVITO_ANY.match(token):
-            add_listing("avito", token)
-        elif NUMBER.match(token):
-            add(default_marketplace, token)
+        for marketplace in marketplaces:
+            if article := marketplace.article_of(token):
+                add(marketplace.key, article)
+                break
+            if marketplace.is_listing(token):
+                add_listing(marketplace.key, token)
+                break
         else:
-            result.invalid.append(token)
+            if NUMBER.match(token):
+                add(default_marketplace, token)
+            else:
+                result.invalid.append(token)
     return result
 
 
@@ -104,10 +84,11 @@ def collect_ids(texts: dict[str, str]) -> ParsedIds:
     merged = ParsedIds()
     for marketplace, text in texts.items():
         parsed = parse_ids(text, marketplace)
-        for key in MARKETPLACE_KEYS:
-            target = merged.for_marketplace(key)
-            target.extend(a for a in parsed.for_marketplace(key) if a not in target)
-            links = merged.listings.setdefault(key, [])
-            links.extend(u for u in parsed.listings_for(key) if u not in links)
+        for key, articles in parsed.items.items():
+            target = merged.items.setdefault(key, [])
+            target.extend(a for a in articles if a not in target)
+        for key, links in parsed.listings.items():
+            target = merged.listings.setdefault(key, [])
+            target.extend(u for u in links if u not in target)
         merged.invalid.extend(parsed.invalid)
     return merged

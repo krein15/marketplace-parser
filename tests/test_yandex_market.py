@@ -153,7 +153,8 @@ def test_card_url_strips_tracking():
 
 
 def test_filters_become_url_parameters():
-    settings = ParseSettings(price_min=2000, price_max=3000, ym_rating_4=True, ym_delivery_days=3)
+    settings = ParseSettings(price_min=2000, price_max=3000,
+                             options={"ym": {"rating_4": True, "delivery_days": 3}})
     parts = urlsplit(search_url("чайник", SortOrder.PRICE_ASC, settings))
     assert parts.path == "/search"
     assert parse_qs(parts.query) == {"text": ["чайник"], "how": ["aprice"], "pricefrom": ["2000"],

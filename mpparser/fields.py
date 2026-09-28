@@ -1,7 +1,12 @@
-"""Registry of Excel columns the user can switch on and off."""
+"""Registry of Excel columns the user can switch on and off.
+
+Columns that only one marketplace fills are declared by that marketplace (see ``mpparser/plugins.py``) and
+appear here through :func:`product_fields` / :func:`review_fields`.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -17,9 +22,10 @@ class Field:
     default: bool = True
     required: bool = False  # always exported, checkbox is locked
     only: tuple[str, ...] = ()  # marketplace keys that provide the value, empty when all of them do
+    tail: bool = False  # keep at the end of the table, after the columns added by marketplaces
 
 
-PRODUCT_FIELDS: list[Field] = [
+CORE_PRODUCT_FIELDS: list[Field] = [
     Field("marketplace", "Площадка", width=13, required=True),
     Field("article", "Артикул", width=13, required=True),
     Field("position", "Позиция", "int", width=10),
@@ -37,16 +43,10 @@ PRODUCT_FIELDS: list[Field] = [
     Field("category", "Категория", width=22, default=False),
     Field("image", "Фото", "url", width=12, default=False),
     Field("url", "Ссылка", "url", width=12),
-    Field("region", "Город", width=16, only=("avito",)),
-    Field("address", "Адрес", "wrap", width=30, default=False, only=("avito",)),
-    Field("published", "Опубликовано", "datetime", width=17, only=("avito",)),
-    Field("views", "Просмотров", "int", width=11, default=False, only=("avito",)),
-    Field("seller_type", "Тип продавца", width=14, default=False, only=("avito",)),
-    Field("seller_reviews", "Отзывов о продавце", "int", width=11, only=("avito",)),
-    Field("parsed_at", "Дата сбора", "datetime", width=17, default=False),
+    Field("parsed_at", "Дата сбора", "datetime", width=17, default=False, tail=True),
 ]
 
-REVIEW_FIELDS: list[Field] = [
+CORE_REVIEW_FIELDS: list[Field] = [
     Field("marketplace", "Площадка", width=13, required=True),
     Field("article", "Артикул", width=13, required=True),
     Field("product_name", "Товар", "wrap", width=36, default=False),
@@ -60,24 +60,28 @@ REVIEW_FIELDS: list[Field] = [
     Field("photos", "Фото, шт", "int", width=9, default=False),
     Field("likes", "Полезно", "int", width=9, default=False),
     Field("seller_answer", "Ответ продавца", "wrap", width=40, default=False, only=("wb",)),
-    Field("seller", "Продавец", width=20, only=("avito",)),
 ]
 
-# Ozon search results do not include these values: each product card has to be opened, which is slower.
-OZON_DETAIL_FIELDS = {"brand", "seller", "seller_rating", "price_card", "category"}
-# Yandex Market search results have prices and rating only: brand, seller and category are on the card.
-YM_DETAIL_FIELDS = {"brand", "seller", "seller_rating", "category"}
-# Avito search results lack these: each listing page has to be opened (slow — Avito needs long pauses).
-AVITO_DETAIL_FIELDS = {"address", "views", "seller_type", "published"}
-# WB search results do not include the category: it is read from the product card on the CDN.
-WB_CARD_FIELDS = {"category"}
+
+def product_fields() -> list[Field]:
+    """Product columns of the core plus the ones declared by the installed marketplaces."""
+    from . import plugins
+
+    return plugins.product_fields(CORE_PRODUCT_FIELDS)
 
 
-def default_keys(fields: list[Field]) -> list[str]:
+def review_fields() -> list[Field]:
+    from . import plugins
+
+    return plugins.review_fields(CORE_REVIEW_FIELDS)
+
+
+def default_keys(fields: Sequence[Field]) -> list[str]:
     return [f.key for f in fields if f.default or f.required]
 
 
-def resolve(fields: list[Field], keys: list[str] | set[str], marketplaces: list[str] | None = None) -> list[Field]:
+def resolve(fields: Sequence[Field], keys: list[str] | set[str],
+            marketplaces: list[str] | None = None) -> list[Field]:
     """Return the selected fields in registry order; required fields are always included.
 
     With ``marketplaces`` given, columns that none of them fills are dropped (no empty "Город" in a WB report).

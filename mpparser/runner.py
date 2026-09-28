@@ -8,10 +8,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import plugins
 from .browser import Browser, BrowserError
 from .export.excel import build_file_name, export_to_excel
 from .inputs import collect_ids
-from .marketplaces import PARSERS, Cancelled, MarketplaceParser, ParserError, Reporter
+from .marketplaces import Cancelled, MarketplaceParser, ParserError, Reporter
 from .models import Product, Review
 from .monitoring import STATUS_ORDER, Comparison, update_history
 from .settings import InputMode, ParseSettings, app_data_dir
@@ -60,7 +61,7 @@ def _log_changes(reporter: Reporter, comparison: Comparison) -> None:
 
 async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
     result = RunResult()
-    ids = collect_ids({mp: getattr(settings, f"{mp}_ids") for mp in settings.marketplaces})
+    ids = collect_ids({mp: settings.ids_text(mp) for mp in settings.marketplaces})
     if settings.mode == InputMode.IDS and ids.invalid:
         reporter.warn(f"Пропущены нераспознанные строки: {', '.join(ids.invalid[:10])}")
 
@@ -68,14 +69,15 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
     share = 1 / len(settings.marketplaces)
     try:
         reporter.log("Запускаю браузер…")
-        needs_window = any(PARSERS[key].needs_window for key in settings.marketplaces)
+        parsers = plugins.parsers()
+        needs_window = any(parsers[key].needs_window for key in settings.marketplaces)
         if needs_window and not settings.show_browser:
             reporter.log("Авито работает только в окне браузера — оно откроется на время сбора. "
                          "Если сайт попросит проверку «я не робот», пройдите её в этом окне.")
         headless = not settings.show_browser and not needs_window
         async with Browser(app_data_dir() / "browser-profile", headless=headless) as browser:
             for index, key in enumerate(settings.marketplaces):
-                parser = PARSERS[key](browser, settings, reporter)
+                parser = parsers[key](browser, settings, reporter)
                 base = index * share
                 try:
                     reporter.set_span(base, base)

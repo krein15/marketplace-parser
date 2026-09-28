@@ -7,6 +7,7 @@ import random
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from typing import Any
 
 from ..browser import Browser
 from ..models import Product, Review
@@ -67,6 +68,10 @@ class MarketplaceParser(ABC):
         self.browser = browser
         self.settings = settings
         self.reporter = reporter
+
+    def option(self, key: str) -> Any:
+        """Value of one of this marketplace's own filters, as declared in its Marketplace description."""
+        return self.settings.option(self.key, key)
 
     async def pause(self) -> None:
         self.reporter.check_cancel()

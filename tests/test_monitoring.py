@@ -41,8 +41,8 @@ def test_job_key_depends_on_what_is_collected():
     assert job_key(base) == job_key(ParseSettings(query="чайник электрический", marketplaces=["ym"],
                                                   max_reviews=50, output_dir="D:/x"))
     assert job_key(ParseSettings(task_name="Чайники")) == "task:Чайники"
-    ids = ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ym_ids="1\n2")
-    assert job_key(ids) == job_key(ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ym_ids="1 2"))
+    ids = ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ids={"ym": "1\n2"})
+    assert job_key(ids) == job_key(ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ids={"ym": "1 2"}))
 
 
 def test_first_run_has_nothing_to_compare_with(history):
@@ -114,12 +114,13 @@ def test_labels_depend_on_how_products_were_collected(tmp_path):
     assert comparison.search
     assert (comparison.label(GONE), comparison.title(NEW)) == ("Выпал из выдачи", "Новые в выдаче")
 
-    ids = ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ym_ids="1 2")
+    ids = ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ids={"ym": "1 2"})
     update_history(path, ids, datetime(2026, 9, 26), ["ym"], [product("1", 100)])
     comparison, _ = update_history(path, ids, datetime(2026, 9, 27), ["ym"], [product("2", 100)])
     assert not comparison.search
     assert (comparison.label(GONE), comparison.title(GONE)) == ("Не найден", "Не найдены")
 
-    listing = ParseSettings(mode=InputMode.IDS, marketplaces=["ym"], ym_ids="https://market.yandex.ru/search?text=a")
+    listing = ParseSettings(mode=InputMode.IDS, marketplaces=["ym"],
+                            ids={"ym": "https://market.yandex.ru/search?text=a"})
     comparison, _ = update_history(path, listing, datetime(2026, 9, 27), ["ym"], [product("2", 100)])
     assert comparison.search

@@ -3,9 +3,9 @@
 Marketplaces change their JSON from time to time; run this script after such a change, review the diff
 and fix the parsers until the tests pass again.
 
-Usage: python tools/dump_fixtures.py [wb] [ozon] [ym] [avito]   (all marketplaces when none is given)
+Usage: python tools/dump_fixtures.py [wb] [ozon] [ym]   (all marketplaces when none is given)
 
-Avito needs a browser window; names of sellers and review authors are replaced, as they are private persons.
+Marketplaces that ship as separate packages keep their own copy of this tool.
 """
 
 from __future__ import annotations
@@ -21,12 +21,10 @@ from urllib.parse import quote
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mpparser.browser import Browser
-from mpparser.marketplaces import AvitoParser, OzonParser, WildberriesParser, YandexMarketParser
-from mpparser.marketplaces.avito import _ITEM_JS, _PAGE_JS, _REVIEWS_JS, _SEARCH_JS, absolute
 from mpparser.marketplaces.base import Reporter
-from mpparser.marketplaces.ozon import widgets
-from mpparser.marketplaces.wildberries import DETAIL_PATH, FEEDBACK_HOSTS
-from mpparser.marketplaces.yandex_market import _SNIPPETS_JS, FOREIGN_BLOCKS
+from mpparser.marketplaces.ozon import OzonParser, widgets
+from mpparser.marketplaces.wildberries import DETAIL_PATH, FEEDBACK_HOSTS, WildberriesParser
+from mpparser.marketplaces.yandex_market import _SNIPPETS_JS, FOREIGN_BLOCKS, YandexMarketParser
 from mpparser.marketplaces.yandex_market import search_url as ym_search_url
 from mpparser.settings import ParseSettings, app_data_dir
 
@@ -134,40 +132,13 @@ async def dump_ym(browser: Browser, settings: ParseSettings, reporter: Reporter)
     save("ym_reviews.html", trim_ym_page(await ym._html(f"/card/x/{sku}/reviews")))
 
 
-async def dump_avito(browser: Browser, settings: ParseSettings, reporter: Reporter) -> None:
-    avito = AvitoParser(browser, settings, reporter)
-    await avito.prepare()
-    assert avito.page is not None
-    await avito._open(f"https://www.avito.ru/all?q={quote(QUERY)}")
-    await avito._scroll_through()
-    items = (await avito.page.evaluate(_SEARCH_JS))[:3]
-    for number, item in enumerate(items, 1):
-        name = item["seller"].split("\n", 1)[0]
-        item["seller"] = item["seller"].replace(name, f"Продавец {number}", 1) if name else ""
-    save("avito_search.json", {"page": await avito.page.evaluate(_PAGE_JS), "items": items})
-    await avito.pause()
-    await avito._open(absolute(items[0]["href"]))
-    item = await avito.page.evaluate(_ITEM_JS)
-    if item["seller"]:
-        item["seller_info"] = item["seller_info"].replace(item["seller"], "Продавец 1")
-        item["seller"] = "Продавец 1"
-    save("avito_item.json", item)
-    if item["seller_href"]:
-        await avito.pause()
-        await avito._open(absolute(item["seller_href"]))
-        reviews = (await avito.page.evaluate(_REVIEWS_JS))[:3]
-        for number, review in enumerate(reviews, 1):
-            review["author"] = f"Покупатель {number}"
-        save("avito_reviews.json", reviews)
-
-
-DUMPERS = {"wb": dump_wb, "ozon": dump_ozon, "ym": dump_ym, "avito": dump_avito}
+DUMPERS = {"wb": dump_wb, "ozon": dump_ozon, "ym": dump_ym}
 
 
 async def main(keys: list[str]) -> None:
     settings = ParseSettings(query=QUERY)
     reporter = Reporter(on_log=lambda _level, message: print(f"  {message}"))
-    async with Browser(app_data_dir() / "browser-profile", headless="avito" not in keys) as browser:
+    async with Browser(app_data_dir() / "browser-profile", headless=True) as browser:
         for key in keys:
             await DUMPERS[key](browser, settings, reporter)
 

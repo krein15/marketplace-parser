@@ -19,19 +19,24 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ..fields import PRODUCT_FIELDS, REVIEW_FIELDS, Field, resolve
+from .. import plugins
+from ..fields import Field, product_fields, resolve, review_fields
 from ..models import Product, Review
 from ..monitoring import CHEAPER, GONE, NEW, PRICIER, STATUS_ORDER, Comparison, Dynamics
-from ..regions import WB_REGIONS
-from ..settings import MARKETPLACE_SHORT, MARKETPLACES, SORT_TITLES, InputMode, ParseSettings
+from ..settings import SORT_TITLES, InputMode, ParseSettings
 
 HEADER_FILL = PatternFill("solid", fgColor="2B2D42")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
 TITLE_FONT = Font(bold=True, size=16, color="2B2D42")
 SECTION_FONT = Font(bold=True, size=12, color="2B2D42")
 MUTED_FONT = Font(color="6B7280")
-MARKETPLACE_COLORS = {"Wildberries": "A20D8A", "Ozon": "005BFF", "Яндекс Маркет": "E0461A", "Авито": "2E9E3E"}
-MARKETPLACE_FONTS = {name: Font(bold=True, color=color) for name, color in MARKETPLACE_COLORS.items()}
+def marketplace_colors() -> dict[str, str]:
+    """Brand colour of every installed marketplace, by its display name."""
+    return {mp.title: mp.excel_color for mp in plugins.registry().values()}
+
+
+def marketplace_fonts() -> dict[str, Font]:
+    return {name: Font(bold=True, color=color) for name, color in marketplace_colors().items()}
 TABLE_STYLE = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
 
 NUMBER_FORMATS = {
@@ -53,7 +58,8 @@ LINE_HEIGHT = 15
 
 
 def build_file_name(settings: ParseSettings, started_at: datetime) -> str:
-    marketplaces = "+".join(MARKETPLACE_SHORT[key] for key in settings.marketplaces)
+    short = plugins.short_titles()
+    marketplaces = "+".join(short.get(key, key) for key in settings.marketplaces)
     subject = settings.query.strip() if settings.mode == InputMode.QUERY else "артикулы"
     subject = settings.task_name or subject
     subject = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", subject).strip()[:40].strip() or "сбор"
@@ -72,10 +78,10 @@ def export_to_excel(
     workbook = Workbook()
     products_sheet = workbook.active
     products_sheet.title = "Товары"
-    product_columns = resolve(PRODUCT_FIELDS, settings.product_fields, settings.marketplaces)
+    product_columns = resolve(product_fields(), settings.product_fields, settings.marketplaces)
     _write_table(products_sheet, "Products", product_columns, products, "C2")
     if settings.collect_reviews:
-        review_columns = resolve(REVIEW_FIELDS, settings.review_fields, settings.marketplaces)
+        review_columns = resolve(review_fields(), settings.review_fields, settings.marketplaces)
         _write_table(workbook.create_sheet("Отзывы"), "Reviews", review_columns, reviews, "C2")
     _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at, comparison)
     if comparison is not None:
@@ -126,8 +132,8 @@ def _write_table(sheet: Worksheet, name: str, columns: list[Field], rows: Sequen
                     lines = max(lines, _estimate_lines(value, spec.width))
             else:
                 cell.alignment = Alignment(vertical="top")
-            if spec.key == "marketplace" and value in MARKETPLACE_FONTS:
-                cell.font = MARKETPLACE_FONTS[value]
+            if spec.key == "marketplace" and value in marketplace_fonts():
+                cell.font = marketplace_fonts()[value]
         if lines > 1:
             sheet.row_dimensions[row_index].height = min(lines * LINE_HEIGHT, MAX_ROW_HEIGHT)
 
@@ -169,11 +175,9 @@ def _write_summary(
         subject = ("Артикулы", "список артикулов и ссылок")
     params = [
         *([("Задание", settings.task_name)] if settings.task_name else []),
-        ("Площадки", ", ".join(MARKETPLACES[k] for k in settings.marketplaces)),
+        ("Площадки", ", ".join(plugins.title_of(k) for k in settings.marketplaces)),
         subject,
         ("Сортировка", SORT_TITLES[settings.sort] if settings.mode == InputMode.QUERY else "—"),
-        *([("Регион WB", settings.region if settings.region in WB_REGIONS else "—")]
-          if "wb" in settings.marketplaces else []),
         *settings.filters_summary(),
         ("Собрано товаров", len(products)),
         ("Собрано отзывов", len(reviews) if settings.collect_reviews else "не собирались"),
@@ -203,7 +207,7 @@ def _write_summary(
     formats = [None, "#,##0", *[NUMBER_FORMATS["money"]] * 4, NUMBER_FORMATS["percent"], "0.00", "#,##0", "#,##0"]
     stats_rows = []
     for key in settings.marketplaces:
-        title = MARKETPLACES[key]
+        title = plugins.title_of(key)
         items = [p for p in products if p.marketplace == title]
         prices = [p.price for p in items if p.price]
         stats_rows.append([
@@ -231,7 +235,8 @@ def _write_summary(
                                group_formats)
     row = max(end_brands, end_sellers)
 
-    prices_by_mp = {MARKETPLACES[k]: [p.price for p in products if p.marketplace == MARKETPLACES[k] and p.price]
+    prices_by_mp = {plugins.title_of(k): [p.price for p in products
+                                          if p.marketplace == plugins.title_of(k) and p.price]
                     for k in settings.marketplaces}
     if sum(len(v) for v in prices_by_mp.values()) >= 5:
         _price_chart(sheet, row + 1, prices_by_mp)
@@ -258,8 +263,8 @@ def _small_table(
             cell = sheet.cell(row=row + r_offset, column=column + offset, value=_cell_value(value))
             if formats[offset]:
                 cell.number_format = formats[offset]
-            if offset == 0 and value in MARKETPLACE_FONTS:
-                cell.font = MARKETPLACE_FONTS[value]
+            if offset == 0 and value in marketplace_fonts():
+                cell.font = marketplace_fonts()[value]
     return row + len(rows) + 1
 
 
@@ -319,8 +324,8 @@ def _price_chart(sheet: Worksheet, row: int, prices_by_mp: dict[str, list[float]
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(labels)
     for series, name in zip(chart.series, names, strict=True):
-        series.graphicalProperties.solidFill = MARKETPLACE_COLORS.get(name, "2B2D42")
-        series.graphicalProperties.line.solidFill = MARKETPLACE_COLORS.get(name, "2B2D42")
+        series.graphicalProperties.solidFill = marketplace_colors().get(name, "2B2D42")
+        series.graphicalProperties.line.solidFill = marketplace_colors().get(name, "2B2D42")
     sheet.add_chart(chart, f"D{row}")
 
 
@@ -376,7 +381,7 @@ def _write_changes(sheet: Worksheet, comparison: Comparison) -> None:
             cell = sheet.cell(row=row, column=col, value=value)
             cell.alignment = Alignment(vertical="top", wrap_text=col == 4)
         sheet.cell(row=row, column=1).font = STATUS_FONTS[change.status]
-        sheet.cell(row=row, column=2).font = MARKETPLACE_FONTS.get(change.marketplace, Font())
+        sheet.cell(row=row, column=2).font = marketplace_fonts().get(change.marketplace, Font())
         for col in (5, 6):
             sheet.cell(row=row, column=col).number_format = NUMBER_FORMATS["money"]
         sheet.cell(row=row, column=7).number_format = SIGNED_MONEY
@@ -396,7 +401,7 @@ def _write_dynamics(sheet: Worksheet, dynamics: Dynamics) -> None:
                *((f"{date:%d.%m %H:%M}", 12) for date in dynamics.dates), ("Ссылка", 11)]
     _header_row(sheet, 4, columns)
     for row, (product, prices) in enumerate(dynamics.rows, 5):
-        sheet.cell(row=row, column=1, value=product.marketplace).font = MARKETPLACE_FONTS.get(product.marketplace,
+        sheet.cell(row=row, column=1, value=product.marketplace).font = marketplace_fonts().get(product.marketplace,
                                                                                                Font())
         sheet.cell(row=row, column=2, value=product.article)
         sheet.cell(row=row, column=3, value=_cell_value(product.name)).alignment = Alignment(vertical="top")

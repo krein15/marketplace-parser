@@ -14,55 +14,75 @@ import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from .fields import PRODUCT_FIELDS, REVIEW_FIELDS
+from . import plugins
+from .fields import product_fields, review_fields
 from .marketplaces import Reporter
-from .regions import DEFAULT_REGION, WB_REGIONS
 from .runner import run
-from .settings import MARKETPLACES, InputMode, ParseSettings, SellerType, SortOrder, app_data_dir
+from .settings import DEFAULT_MARKETPLACES, InputMode, ParseSettings, SortOrder, app_data_dir
 from .tasks import get_task, load_tasks, mark_run
 
 log = logging.getLogger("mpparser.cli")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Flags for the marketplaces and filters that are installed right now."""
+    marketplaces = plugins.registry()
+    names = ", ".join(mp.title for mp in marketplaces.values())
     parser = argparse.ArgumentParser(
-        prog="mpparser", description="Сбор товаров, цен и отзывов с Wildberries, Ozon, Яндекс Маркета и Авито в Excel"
+        prog="mpparser", description=f"Сбор товаров, цен и отзывов в Excel. Площадки: {names}"
     )
-    parser.add_argument("--wb", action="store_true", help="собирать с Wildberries")
-    parser.add_argument("--ozon", action="store_true", help="собирать с Ozon")
-    parser.add_argument("--ym", action="store_true", help="собирать с Яндекс Маркета")
-    parser.add_argument("--avito", action="store_true", help="собирать с Авито")
+    for key, marketplace in marketplaces.items():
+        parser.add_argument(f"--{key}", action="store_true", help=f"собирать с {marketplace.title}")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("-q", "--query", help="поисковый запрос")
-    source.add_argument("--ids", action="store_true", help="режим артикулов (см. --wb-ids / --ozon-ids / --ym-ids)")
+    ids_flags = " / ".join(f"--{key}-ids" for key in marketplaces)
+    source.add_argument("--ids", action="store_true", help=f"режим артикулов (см. {ids_flags})")
     source.add_argument("--task", metavar="НАЗВАНИЕ", help="запустить сохранённое задание мониторинга")
     source.add_argument("--list-tasks", action="store_true", help="показать сохранённые задания")
-    parser.add_argument("--wb-ids", default="", help="артикулы или ссылки WB через запятую")
-    parser.add_argument("--ozon-ids", default="", help="артикулы или ссылки Ozon через запятую")
-    parser.add_argument("--ym-ids", default="", help="SKU или ссылки Яндекс Маркета через запятую")
-    parser.add_argument("--avito-ids", default="", help="ссылки на объявления или на выдачу Авито через запятую")
+    for key, marketplace in marketplaces.items():
+        parser.add_argument(f"--{key}-ids", default="", dest=f"ids_{key}",
+                            help=f"артикулы или ссылки {marketplace.title} через запятую")
+
     filters = parser.add_argument_group("фильтры")
     filters.add_argument("--price-min", type=int, help="цена от, ₽ (все площадки)")
     filters.add_argument("--price-max", type=int, help="цена до, ₽ (все площадки)")
-    filters.add_argument("--ym-rating4", action="store_true", help="Маркет: рейтинг от 4.0")
-    filters.add_argument("--ym-delivery", type=int, choices=[3, 7], default=0, help="Маркет: срок доставки, дней")
-    filters.add_argument("--avito-city", action="append", metavar="ГОРОД",
-                         help="Авито: город или регион (можно несколько раз), по умолчанию вся Россия")
-    filters.add_argument("--avito-seller", choices=[s.value for s in SellerType], default=SellerType.ALL.value)
-    filters.add_argument("--avito-delivery", action="store_true", help="Авито: только с Авито Доставкой")
-    filters.add_argument("--avito-title-only", action="store_true", help="Авито: искать только в названиях")
+    for key, marketplace in marketplaces.items():
+        for option in marketplace.options:
+            _add_option(filters, key, marketplace.title, option)
+
     parser.add_argument("-n", "--max-products", type=int, default=100)
     parser.add_argument("-r", "--reviews", type=int, default=0, metavar="N", help="отзывов на товар (0 — не собирать)")
     parser.add_argument("--sort", choices=[s.value for s in SortOrder], default=SortOrder.POPULAR.value)
-    parser.add_argument("--region", choices=list(WB_REGIONS), default=DEFAULT_REGION, metavar="ГОРОД")
     parser.add_argument("--product-fields",
-                        help="ключи колонок через запятую: " + ",".join(f.key for f in PRODUCT_FIELDS))
+                        help="ключи колонок через запятую: " + ",".join(f.key for f in product_fields()))
     parser.add_argument("--review-fields",
-                        help="ключи колонок через запятую: " + ",".join(f.key for f in REVIEW_FIELDS))
+                        help="ключи колонок через запятую: " + ",".join(f.key for f in review_fields()))
     parser.add_argument("-o", "--output-dir", help="папка для Excel-файла")
     parser.add_argument("--show-browser", action="store_true", help="показывать окно браузера")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
+
+
+def option_dest(marketplace: str, option_key: str) -> str:
+    return f"opt_{marketplace}_{option_key}"
+
+
+def _add_option(group: argparse._ArgumentGroup, key: str, title: str, option: plugins.Option) -> None:
+    """One command-line flag for one marketplace filter. Buttons ("setup") have nothing to pass."""
+    if option.kind == "setup":
+        return
+    flag, dest = option.flag(key), option_dest(key, option.key)
+    help_text = f"{title}: {option.title.lower()}"
+    if option.kind == "switch":
+        group.add_argument(flag, dest=dest, action="store_true", help=help_text)
+    elif option.kind == "choice":
+        values = [value for value, _ in option.choices]
+        group.add_argument(flag, dest=dest, default=None, choices=values,
+                           type=int if isinstance(option.default, int) else str,
+                           metavar=option.cli_metavar or None, help=help_text)
+    elif option.kind == "multi":
+        group.add_argument(flag, dest=dest, action="append", metavar=option.cli_metavar or "ЗНАЧЕНИЕ",
+                           help=f"{help_text} (можно указать несколько раз)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -76,37 +96,33 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
                         format="%(levelname)s %(name)s: %(message)s")
 
+    marketplaces = plugins.registry()
     settings = ParseSettings(
-        marketplaces=[k for k in MARKETPLACES if getattr(args, k)] or ["wb", "ozon"],
+        marketplaces=[k for k in marketplaces if getattr(args, k)] or list(DEFAULT_MARKETPLACES),
         mode=InputMode.QUERY if args.query else InputMode.IDS,
         query=args.query or "",
-        wb_ids=args.wb_ids,
-        ozon_ids=args.ozon_ids,
-        ym_ids=args.ym_ids,
-        avito_ids=args.avito_ids,
         price_min=args.price_min,
         price_max=args.price_max,
-        ym_rating_4=args.ym_rating4,
-        ym_delivery_days=args.ym_delivery,
-        avito_seller=SellerType(args.avito_seller),
-        avito_delivery=args.avito_delivery,
-        avito_title_only=args.avito_title_only,
         max_products=args.max_products,
         sort=SortOrder(args.sort),
         collect_reviews=args.reviews > 0,
         max_reviews=max(args.reviews, 1),
-        region=args.region,
         show_browser=args.show_browser,
         open_when_done=False,
     )
+    for key, marketplace in marketplaces.items():
+        if text := getattr(args, f"ids_{key}", ""):
+            settings.set_ids(key, text)
+        for option in marketplace.options:
+            value = getattr(args, option_dest(key, option.key), None)
+            if value not in (None, False):
+                settings.set_option(key, option.key, value)
     if args.product_fields:
         settings.product_fields = args.product_fields.split(",")
     if args.review_fields:
         settings.review_fields = args.review_fields.split(",")
     if args.output_dir:
         settings.output_dir = args.output_dir
-    if args.avito_city:
-        settings.avito_locations = args.avito_city
     if problems := settings.validate():
         print("\n".join(problems), file=sys.stderr)
         return 2

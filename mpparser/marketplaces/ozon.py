@@ -20,13 +20,17 @@ from urllib.parse import quote
 
 from patchright.async_api import Page
 
-from ..fields import OZON_DETAIL_FIELDS
 from ..models import Product, Review
+from ..plugins import Marketplace, Option
 from ..settings import SortOrder
 from ..textutils import parse_float, parse_int
 from .base import MarketplaceParser, ParserError
 
 SITE = "https://www.ozon.ru"
+# A link to one product: ozon.ru/product/<slug>-<sku>/ or the older /context/detail/id/<sku>/
+ITEM_LINK = re.compile(r"ozon\.[a-z]{2,3}/(?:product|context/detail/id)/(?:[^/?#\s]*-)?(\d{5,})", re.IGNORECASE)
+# Search tiles lack these values: each product card has to be opened, which is slower.
+DETAIL_FIELDS = {"brand", "seller", "seller_rating", "price_card", "category"}
 API = "/api/entrypoint-api.bx/page/json/v2?url="
 ANTIBOT_TIMEOUT = 45
 BLOCKED_TITLES = ("Доступ ограничен", "нет соединения")
@@ -316,7 +320,7 @@ class OzonParser(MarketplaceParser):
 
     async def enrich(self, products: list[Product], field_keys: set[str]) -> None:
         """Search tiles lack seller, brand, card price and category: open the cards if those fields are wanted."""
-        if not field_keys & OZON_DETAIL_FIELDS:
+        if not field_keys & DETAIL_FIELDS:
             return
         pending = [p for p in products if not p.seller]
         for index, product in enumerate(pending, 1):
@@ -337,3 +341,28 @@ class OzonParser(MarketplaceParser):
             if path:
                 await self.pause()
         return reviews
+
+
+MARKETPLACE = Marketplace(
+    key="ozon",
+    title="Ozon",
+    short_title="Ozon",
+    site="ozon.ru",
+    color=("#005BFF", "#2B7BFF"),
+    excel_color="005BFF",
+    parser=OzonParser,
+    ids_placeholder="3627230434\nhttps://www.ozon.ru/product/…-5413455528/",
+    item_patterns=(ITEM_LINK,),
+    options=(
+        Option(
+            key="address",
+            title="Регион Ozon",
+            kind="setup",
+            hint="Ozon берёт регион из адреса доставки в профиле браузера",
+            url=SITE + "/",
+            instruction="Укажите адрес доставки (вверху страницы) и закройте окно браузера — "
+                        "адрес сохранится для следующих запусков.",
+        ),
+    ),
+    order=20,
+)

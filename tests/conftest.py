@@ -62,18 +62,3 @@ def ym_card() -> str:
 @pytest.fixture
 def ym_reviews() -> str:
     return load_text("ym_reviews.html")
-
-
-@pytest.fixture
-def avito_search() -> dict:
-    return load("avito_search.json")
-
-
-@pytest.fixture
-def avito_item() -> dict:
-    return load("avito_item.json")
-
-
-@pytest.fixture
-def avito_reviews() -> list:
-    return json.loads(load_text("avito_reviews.json"))

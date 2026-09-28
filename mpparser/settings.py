@@ -1,4 +1,9 @@
-"""User settings: what to collect and where to save it. Persisted between launches as JSON."""
+"""User settings: what to collect and where to save it. Persisted between launches as JSON.
+
+Settings that belong to one marketplace (its region, its filters, its list of links) are not named here:
+they live in ``ids`` and ``options`` under the marketplace key, and the marketplace itself declares them
+(see ``mpparser/plugins.py``).
+"""
 
 from __future__ import annotations
 
@@ -8,16 +13,12 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
-from . import APP_NAME
-from .fields import PRODUCT_FIELDS, REVIEW_FIELDS, default_keys
-from .regions import AVITO_LOCATIONS, DEFAULT_AVITO_LOCATION, DEFAULT_REGION
+from . import APP_NAME, plugins
+from .fields import default_keys, product_fields, review_fields
 
 log = logging.getLogger(__name__)
-
-MARKETPLACES = {"wb": "Wildberries", "ozon": "Ozon", "ym": "Яндекс Маркет", "avito": "Авито"}
-# Short names for file names and compact labels.
-MARKETPLACE_SHORT = {"wb": "WB", "ozon": "Ozon", "ym": "ЯМ", "avito": "Авито"}
 
 
 class InputMode(StrEnum):
@@ -41,17 +42,17 @@ SORT_TITLES = {
     SortOrder.NEW: "Новинки",
 }
 
-class SellerType(StrEnum):
-    ALL = "all"
-    PRIVATE = "private"
-    COMPANY = "company"
-
-
-SELLER_TYPE_TITLES = {SellerType.ALL: "Все", SellerType.PRIVATE: "Частные", SellerType.COMPANY: "Компании"}
-DELIVERY_DAYS_TITLES = {0: "Любой", 3: "До 3 дней", 7: "До 7 дней"}
-
 MAX_PRODUCTS_LIMIT = 10_000
 MAX_REVIEWS_LIMIT = 1_000
+DEFAULT_MARKETPLACES = ["wb", "ozon"]
+
+
+def marketplace_titles() -> dict[str, str]:
+    return plugins.titles()
+
+
+def marketplace_short() -> dict[str, str]:
+    return plugins.short_titles()
 
 
 def app_data_dir() -> Path:
@@ -67,44 +68,66 @@ def default_output_dir() -> Path:
 
 @dataclass
 class ParseSettings:
-    marketplaces: list[str] = field(default_factory=lambda: ["wb", "ozon"])
+    marketplaces: list[str] = field(default_factory=lambda: list(DEFAULT_MARKETPLACES))
     mode: InputMode = InputMode.QUERY
     query: str = ""
-    wb_ids: str = ""  # free text: articles and/or links, one per line
-    ozon_ids: str = ""
-    ym_ids: str = ""
-    avito_ids: str = ""
+    ids: dict[str, str] = field(default_factory=dict)  # marketplace key → free text: articles and/or links
     max_products: int = 100
     sort: SortOrder = SortOrder.POPULAR
     collect_reviews: bool = True
     max_reviews: int = 20
-    region: str = DEFAULT_REGION
-    # Filters. Price applies to every marketplace, the rest to the one named in the prefix.
+    # Price applies to every marketplace; everything else a marketplace asks for lives in ``options``.
     price_min: int | None = None
     price_max: int | None = None
-    ym_rating_4: bool = False  # "Рейтинг от 4.0"
-    ym_delivery_days: int = 0  # 0 — any, 3 or 7
-    avito_locations: list[str] = field(default_factory=lambda: [DEFAULT_AVITO_LOCATION])
-    avito_seller: SellerType = SellerType.ALL
-    avito_delivery: bool = False  # only listings with Avito Delivery
-    avito_title_only: bool = False  # search in titles only
-    product_fields: list[str] = field(default_factory=lambda: default_keys(PRODUCT_FIELDS))
-    review_fields: list[str] = field(default_factory=lambda: default_keys(REVIEW_FIELDS))
+    options: dict[str, dict[str, Any]] = field(default_factory=dict)  # marketplace key → its filter values
+    product_fields: list[str] = field(default_factory=lambda: default_keys(product_fields()))
+    review_fields: list[str] = field(default_factory=lambda: default_keys(review_fields()))
     output_dir: str = field(default_factory=lambda: str(default_output_dir()))
     open_when_done: bool = True
     show_browser: bool = False
     task_name: str = ""  # set when the run is a saved monitoring task: its history is kept under this name
 
+    # --- per-marketplace values ---
+
+    def ids_text(self, marketplace: str) -> str:
+        return self.ids.get(marketplace, "")
+
+    def set_ids(self, marketplace: str, text: str) -> None:
+        self.ids[marketplace] = text
+
+    def option(self, marketplace: str, key: str) -> Any:
+        """Value of a marketplace filter, falling back to the default declared by the marketplace."""
+        stored = self.options.get(marketplace, {})
+        if key in stored:
+            return stored[key]
+        plugin = plugins.get(marketplace)
+        option = plugin.option(key) if plugin else None
+        return option.default if option else None
+
+    def set_option(self, marketplace: str, key: str, value: Any) -> None:
+        self.options.setdefault(marketplace, {})[key] = value
+
+    def locations(self, marketplace: str, key: str) -> list[tuple[str, str]]:
+        """Chosen places of a "multi" filter as (name, site slug) pairs."""
+        plugin = plugins.get(marketplace)
+        option = plugin.option(key) if plugin else None
+        names = self.option(marketplace, key) or []
+        return [(name, option.slug_of(name) if option else name) for name in names]
+
+    # --- checks and summaries ---
+
     def validate(self) -> list[str]:
         """Return human-readable problems; an empty list means the settings can be run."""
         problems = []
+        known = plugins.keys()
+        if unknown := [key for key in self.marketplaces if key not in known]:
+            titles = ", ".join(unknown)
+            problems.append(f"Площадки нет в программе: {titles}. Возможно, не установлен её модуль.")
         if not self.marketplaces:
             problems.append("Выберите хотя бы одну площадку.")
         if self.mode == InputMode.QUERY and not self.query.strip():
             problems.append("Введите поисковый запрос.")
-        if self.mode == InputMode.IDS and not any(
-            getattr(self, f"{mp}_ids").strip() for mp in self.marketplaces
-        ):
+        if self.mode == InputMode.IDS and not any(self.ids_text(mp).strip() for mp in self.marketplaces):
             problems.append("Добавьте артикулы или ссылки на товары.")
         if not 1 <= self.max_products <= MAX_PRODUCTS_LIMIT:
             problems.append(f"Количество товаров должно быть от 1 до {MAX_PRODUCTS_LIMIT}.")
@@ -116,8 +139,21 @@ class ParseSettings:
             problems.append("Цена не может быть отрицательной.")
         if self.price_min is not None and self.price_max is not None and self.price_min > self.price_max:
             problems.append("Минимальная цена больше максимальной.")
-        if "avito" in self.marketplaces and self.mode == InputMode.QUERY and not self.avito_locations:
-            problems.append("Выберите хотя бы один город для Авито.")
+        problems += self._option_problems()
+        return problems
+
+    def _option_problems(self) -> list[str]:
+        problems = []
+        for key in self.marketplaces:
+            plugin = plugins.get(key)
+            if not plugin:
+                continue
+            for option in plugin.options:
+                if not option.required or (option.query_only and self.mode != InputMode.QUERY):
+                    continue
+                if not self.option(key, option.key):
+                    problems.append(option.required_message
+                                    or f"{plugin.title}: выберите хотя бы одно значение — {option.title}.")
         return problems
 
     def filters_summary(self) -> list[tuple[str, str]]:
@@ -127,26 +163,24 @@ class ParseSettings:
             low = f"от {self.price_min:,} ₽".replace(",", " ") if self.price_min is not None else ""
             high = f"до {self.price_max:,} ₽".replace(",", " ") if self.price_max is not None else ""
             rows.append(("Цена", " ".join(filter(None, (low, high)))))
-        if "ym" in self.marketplaces:
-            ym = [t for t, on in (("рейтинг от 4.0", self.ym_rating_4),
-                                  (DELIVERY_DAYS_TITLES.get(self.ym_delivery_days, "").lower(),
-                                   bool(self.ym_delivery_days))) if on]
-            if ym:
-                rows.append(("Фильтры Маркета", ", ".join(ym)))
-        if "avito" in self.marketplaces:
-            if self.mode == InputMode.QUERY:
-                rows.append(("Города Авито", ", ".join(self.avito_locations)))
-            avito = [t for t, on in ((f"продавцы: {SELLER_TYPE_TITLES[self.avito_seller].lower()}",
-                                      self.avito_seller != SellerType.ALL),
-                                     ("с Авито Доставкой", self.avito_delivery),
-                                     ("только в названиях", self.avito_title_only)) if on]
-            if avito:
-                rows.append(("Фильтры Авито", ", ".join(avito)))
+        for key in self.marketplaces:
+            plugin = plugins.get(key)
+            if not plugin:
+                continue
+            grouped = []
+            for option in plugin.options:
+                if option.query_only and self.mode != InputMode.QUERY:
+                    continue
+                text = option.summary(self.option(key, option.key))
+                if not text:
+                    continue
+                if option.own_row:
+                    rows.append((option.label or option.title, text))
+                else:
+                    grouped.append(text)
+            if grouped:
+                rows.append((plugin.filters_title(), ", ".join(grouped)))
         return rows
-
-    def avito_location_slugs(self) -> list[tuple[str, str]]:
-        """Selected Avito locations as (name, URL slug). Unknown names are treated as slugs typed by the user."""
-        return [(name, AVITO_LOCATIONS.get(name, name)) for name in self.avito_locations]
 
     # --- persistence ---
 
@@ -168,12 +202,12 @@ class ParseSettings:
     @classmethod
     def from_dict(cls, raw: dict) -> ParseSettings | None:
         """Settings from saved JSON; unknown keys are ignored. None if the values do not fit."""
+        raw = _migrate(raw)
         known = {f.name for f in fields(cls)}
         try:
             settings = cls(**{k: v for k, v in raw.items() if k in known})
             settings.mode = InputMode(settings.mode)
             settings.sort = SortOrder(settings.sort)
-            settings.avito_seller = SellerType(settings.avito_seller)
         except (TypeError, ValueError):
             return None
         return settings
@@ -183,3 +217,35 @@ class ParseSettings:
             self.path().write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError as exc:
             log.warning("Could not save settings: %s", exc)
+
+
+# Settings files written before marketplaces became plugins: "wb_ids" and "avito_seller" instead of
+# ids["wb"] and options["avito"]["seller"].
+LEGACY_OPTIONS = {
+    "region": ("wb", "region"),
+    "ym_rating_4": ("ym", "rating_4"),
+    "ym_delivery_days": ("ym", "delivery_days"),
+    "avito_locations": ("avito", "locations"),
+    "avito_seller": ("avito", "seller"),
+    "avito_delivery": ("avito", "delivery"),
+    "avito_title_only": ("avito", "title_only"),
+}
+
+
+def _migrate(raw: dict) -> dict:
+    if not isinstance(raw, dict):
+        return raw
+    raw = dict(raw)
+    ids = dict(raw.get("ids") or {})
+    options: dict[str, dict[str, Any]] = {k: dict(v) for k, v in (raw.get("options") or {}).items()}
+    for name in list(raw):
+        if name.endswith("_ids") and isinstance(raw[name], str):
+            ids.setdefault(name.removesuffix("_ids"), raw.pop(name))
+        elif name in LEGACY_OPTIONS:
+            marketplace, key = LEGACY_OPTIONS[name]
+            options.setdefault(marketplace, {}).setdefault(key, raw.pop(name))
+    if ids:
+        raw["ids"] = ids
+    if options:
+        raw["options"] = options
+    return raw

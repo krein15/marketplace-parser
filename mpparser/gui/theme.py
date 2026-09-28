@@ -22,13 +22,6 @@ WARNING = ("#B45309", "#F59E0B")
 NEUTRAL_BUTTON = ("#E8EAF2", "#2A2E3D")
 NEUTRAL_BUTTON_HOVER = ("#DADDE8", "#343949")
 
-MARKETPLACE_COLORS = {
-    "wb": ("#A20D8A", "#CB11AB"),
-    "ozon": ("#005BFF", "#2B7BFF"),
-    "ym": ("#E0461A", "#FF6A3D"),
-    "avito": ("#2E9E3E", "#4CC45C"),
-}
-
 FONT_FAMILY = "Segoe UI"
 
 
