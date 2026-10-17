@@ -225,5 +225,6 @@ tests/                  тесты и фикстуры
 - Telegram: [@krein1](https://t.me/krein1)
 - Email: [reinkolya@gmail.com](mailto:reinkolya@gmail.com)
 - GitHub: [krein15](https://github.com/krein15)
+- Website: https://kreinstudio.ru/
 
 Лицензия: [MIT](LICENSE).
