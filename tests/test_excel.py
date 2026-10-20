@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 from openpyxl import load_workbook
 
+from mpparser.competitors import compare_with_rivals, parse_own
 from mpparser.export.excel import build_file_name, export_to_excel, price_buckets
 from mpparser.models import Product, Review
 from mpparser.monitoring import CHEAPER, GONE, Change, Comparison, Dynamics, Positions
@@ -186,3 +187,49 @@ def test_first_run_changes_sheet_explains_itself(tmp_path, products, reviews):
     workbook = load_workbook(path)
     assert "первый запуск" in workbook["Изменения"]["A2"].value
     assert "Динамика цен" not in workbook.sheetnames
+
+
+def test_competitor_sheets(tmp_path, products, reviews):
+    rivals = [
+        Product(marketplace="Wildberries", article="7", name="Наушники дешевле", brand="Чужой", seller="Другой",
+                price=499.0, rating=4.8, reviews_count=800, position=2, url="https://wb/7"),
+        Product(marketplace="Wildberries", article="8", name="Наушники дороже", price=900.0, rating=4.0,
+                url="https://wb/8"),
+    ]
+    collected = products + rivals
+    competition = compare_with_rivals(collected, parse_own("1", ""))
+    path = tmp_path / "report.xlsx"
+    export_to_excel(path, ParseSettings(query="наушники"), collected, reviews, datetime(2026, 9, 18, 10, 0),
+                    competition=competition)
+    workbook = load_workbook(path)
+    assert workbook.sheetnames == ["Сводка", "Конкуренты", "Кто дешевле", "Товары", "Отзывы"]
+
+    sheet = workbook["Конкуренты"]
+    assert [c.value for c in sheet[4]][:6] == ["Площадка", "Артикул", "Мой товар", "Моя цена", "Место по цене",
+                                               "Самая низкая цена"]
+    assert [c.value for c in sheet[5]][:8] == ["Wildberries", "1", "Наушники WB", 556, "2 из 3", 499, 57, 11.4]
+    assert [c.value for c in sheet[5]][8:10] == [699.5, -20.5]
+    assert sheet["O5"].hyperlink.target == products[0].url
+
+    cheaper = workbook["Кто дешевле"]
+    assert [c.value for c in cheaper[4]][:4] == ["Мой артикул", "Площадка", "Конкурент", "Артикул"]
+    assert [c.value for c in cheaper[5]][:9] == ["1", "Wildberries", "Наушники дешевле", "7", "Чужой", "Другой",
+                                                 499, -57, -10.3]
+    assert cheaper["M5"].hyperlink.target == "https://wb/7"
+    summary = [row[0] for row in workbook["Сводка"].iter_rows(values_only=True)]
+    assert "Мои товары против выдачи" in summary and "Дешевле меня" in summary
+
+
+def test_the_cheaper_sheet_appears_only_when_somebody_undercuts_me(tmp_path, products, reviews):
+    path = tmp_path / "report.xlsx"
+    export_to_excel(path, ParseSettings(query="q"), products, reviews, datetime(2026, 9, 18),
+                    competition=compare_with_rivals(products, parse_own("1", "")))
+    names = load_workbook(path).sheetnames
+    assert "Конкуренты" in names and "Кто дешевле" not in names
+
+
+def test_competitor_sheets_are_skipped_without_my_products(tmp_path, products, reviews):
+    path = tmp_path / "report.xlsx"
+    export_to_excel(path, ParseSettings(query="q"), products, reviews, datetime(2026, 9, 18),
+                    competition=compare_with_rivals(products, parse_own("", "")))
+    assert "Конкуренты" not in load_workbook(path).sheetnames

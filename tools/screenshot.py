@@ -58,6 +58,8 @@ def main() -> None:
     app.output_dir.delete(0, "end")
     app.output_dir.insert(0, str(Path.home() / "Documents" / "Marketplace Parser"))
     app.open_when_done.select()
+    app.own_ids.insert("1.0", "1023385847\n932846434")
+    app.own_names.insert("1.0", "Моя Марка")
     if mode == "ids":
         app.mode.set("Артикулы и ссылки")
         app._refresh_mode()

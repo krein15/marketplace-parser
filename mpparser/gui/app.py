@@ -74,12 +74,14 @@ class App(ctk.CTk):
         self.tabs.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         collect_tab = self.tabs.add("Сбор")
         filters_tab = self.tabs.add("Фильтры")
+        own_tab = self.tabs.add("Мои товары")
         monitoring_tab = self.tabs.add("Мониторинг")
         fields_tab = self.tabs.add("Колонки Excel")
         output_tab = self.tabs.add("Сохранение")
         self._build_input(collect_tab)
         self._build_options(collect_tab)
         self._build_filters(filters_tab)
+        self._build_own(own_tab)
         self._build_monitoring(monitoring_tab)
         self._build_fields(fields_tab)
         self._build_output(output_tab)
@@ -253,6 +255,33 @@ class App(ctk.CTk):
         self.max_reviews = NumberField(row2, "Отзывов на товар", [5, 10, 20, 50, 100, 300], self.settings.max_reviews)
         self.max_reviews.pack(side="left", padx=(24, 0))
         self._refresh_reviews_state()
+
+    def _build_own(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, None, "Мои товары среди конкурентов",
+                           hint="Отметьте свои товары — и в отчёте появятся листы «Конкуренты» и «Кто дешевле»: "
+                                "ваша цена против той же выдачи, место по цене, рейтинг и отзывы, а также те, "
+                                "кто дешевле вас. Можно оставить пустым.")
+        card.pack(fill="both", expand=True)
+        row = ctk.CTkFrame(card.body, fg_color="transparent")
+        row.pack(fill="both", expand=True)
+        row.grid_columnconfigure((0, 1), weight=1, uniform="own")
+        row.grid_rowconfigure(0, weight=1)
+        self.own_ids = self._text_box(row, 0, "Артикулы или ссылки на мои товары",
+                                      "По одному на строку или через запятую", self.settings.own_ids)
+        self.own_names = self._text_box(row, 1, "Мой бренд или продавец",
+                                        "Как они написаны на сайте площадки", self.settings.own_names)
+
+    def _text_box(self, row: ctk.CTkFrame, column: int, label: str, hint: str, value: str) -> ctk.CTkTextbox:
+        box = ctk.CTkFrame(row, fg_color="transparent")
+        box.grid(row=0, column=column, sticky="nsew", padx=(0, 14) if column == 0 else 0)
+        ctk.CTkLabel(box, text=label, font=theme.font(13, "bold"), text_color=theme.TEXT).pack(anchor="w")
+        text = ctk.CTkTextbox(box, height=140, font=theme.font(13), border_width=1, fg_color=theme.INPUT_BG,
+                              border_color=theme.CARD_BORDER, text_color=theme.TEXT, wrap="none")
+        text.pack(fill="both", expand=True, pady=(4, 2))
+        if value:
+            text.insert("1.0", value)
+        ctk.CTkLabel(box, text=hint, font=theme.font(11), text_color=theme.TEXT_MUTED, anchor="w").pack(fill="x")
+        return text
 
     def _build_filters(self, tab: ctk.CTkBaseClass) -> None:
         # The number of marketplaces is not fixed, so this tab is the one place where scrolling is needed.
@@ -551,6 +580,9 @@ class App(ctk.CTk):
         self.max_reviews.combo.set(str(settings.max_reviews))
         self._set_entry(self.price_min, settings.price_min)
         self._set_entry(self.price_max, settings.price_max)
+        for box, value in ((self.own_ids, settings.own_ids), (self.own_names, settings.own_names)):
+            box.delete("1.0", "end")
+            box.insert("1.0", value)
         for marketplace in plugins.with_options():
             for option in marketplace.options:
                 self._apply_option(marketplace, option, settings.option(marketplace.key, option.key))
@@ -797,6 +829,8 @@ class App(ctk.CTk):
             options={marketplace.key: {option.key: self._read_option(marketplace, option)
                                        for option in marketplace.options if option.kind != "setup"}
                      for marketplace in plugins.with_options()},
+            own_ids=self.own_ids.get("1.0", "end").strip(),
+            own_names=self.own_names.get("1.0", "end").strip(),
             product_fields=[k for k, v in self.product_field_vars.items() if v.get()],
             review_fields=[k for k, v in self.review_field_vars.items() if v.get()],
             output_dir=self.output_dir.get().strip(),

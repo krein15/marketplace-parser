@@ -1,4 +1,5 @@
-"""Excel report: "Сводка", "Изменения", "Товары", "Отзывы", "Позиции" and "Динамика цен" sheets."""
+"""Excel report: "Сводка", "Изменения", "Конкуренты", "Кто дешевле", "Товары", "Отзывы", "Позиции"
+and "Динамика цен" sheets."""
 
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .. import plugins
+from ..competitors import RIVALS_PER_PRODUCT, Competition
 from ..fields import Field, product_fields, resolve, review_fields
 from ..models import Product, Review
 from ..monitoring import CHEAPER, GONE, NEW, PRICIER, STATUS_ORDER, Comparison, Dynamics, Positions
@@ -75,6 +77,7 @@ def export_to_excel(
     comparison: Comparison | None = None,
     dynamics: Dynamics | None = None,
     positions: Positions | None = None,
+    competition: Competition | None = None,
 ) -> Path:
     workbook = Workbook()
     products_sheet = workbook.active
@@ -84,9 +87,15 @@ def export_to_excel(
     if settings.collect_reviews:
         review_columns = resolve(review_fields(), settings.review_fields, settings.marketplaces)
         _write_table(workbook.create_sheet("Отзывы"), "Reviews", review_columns, reviews, "C2")
-    _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at, comparison)
+    _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at, comparison,
+                   competition)
     if comparison is not None:
         _write_changes(workbook.create_sheet("Изменения", 1), comparison)
+    if competition:
+        place = 2 if comparison is not None else 1
+        _write_competitors(workbook.create_sheet("Конкуренты", place), competition)
+        if any(spot.cheaper for spot in competition.spots):
+            _write_cheaper(workbook.create_sheet("Кто дешевле", place + 1), competition)
     if positions is not None and positions.rows:
         _write_positions(workbook.create_sheet("Позиции"), positions)
     if dynamics is not None and len(dynamics.dates) >= 2:
@@ -163,6 +172,7 @@ def _write_summary(
     reviews: Sequence[Review],
     started_at: datetime,
     comparison: Comparison | None = None,
+    competition: Competition | None = None,
 ) -> None:
     sheet.sheet_view.showGridLines = False
     sheet["A1"] = "Сбор данных с маркетплейсов"
@@ -203,6 +213,15 @@ def _write_summary(
                 sheet.cell(row=row, column=1, value=label).font = STATUS_FONTS.get(status, MUTED_FONT)
                 sheet.cell(row=row, column=2, value=value).alignment = Alignment(horizontal="left")
                 row += 1
+
+    if competition:
+        row = _section(sheet, row + 1, "Мои товары против выдачи")
+        for label, value in (("Моих товаров в выдаче", len(competition.spots)),
+                             ("Дешевле меня", competition.cheaper),
+                             ("Никто не дешевле", competition.leading)):
+            sheet.cell(row=row, column=1, value=label).font = MUTED_FONT
+            sheet.cell(row=row, column=2, value=value).alignment = Alignment(horizontal="left")
+            row += 1
 
     row = _section(sheet, row + 1, "Итоги по площадкам")
     headers = ["Площадка", "Товаров", "Мин. цена", "Средняя цена", "Медиана", "Макс. цена",
@@ -450,3 +469,85 @@ def _write_positions(sheet: Worksheet, positions: Positions) -> None:
         _link(sheet.cell(row=row, column=len(columns)), product.url)
     _add_table(sheet, "Positions", 4, 4 + len(positions.rows), len(columns))
     sheet.freeze_panes = "F5"
+
+
+def _write_competitors(sheet: Worksheet, competition: Competition) -> None:
+    """My products against the products of the same marketplace from this very report."""
+    sheet["A1"] = "Мои товары против выдачи"
+    sheet["A2"] = ("Каждый мой товар сравнивается с товарами той же площадки из этого отчёта. «Место по цене» — "
+                   "какой я по цене среди них: 1 значит, что дешевле меня нет никого. Сверху — товары, у которых "
+                   "больше всего конкурентов дешевле.")
+    sheet["A1"].font, sheet["A2"].font = TITLE_FONT, MUTED_FONT
+    columns = [("Площадка", 15), ("Артикул", 14), ("Мой товар", 40), ("Моя цена", 12), ("Место по цене", 14),
+               ("Самая низкая цена", 15), ("Я дороже на", 13), ("Я дороже на, %", 14), ("Медиана выдачи", 14),
+               ("Отклонение от медианы", 15), ("Мой рейтинг", 12), ("Рейтинг в выдаче", 14),
+               ("Моих отзывов", 13), ("Отзывов в выдаче", 15), ("Ссылка", 11)]
+    _header_row(sheet, 4, columns)
+    fonts = marketplace_fonts()
+    for row, spot in enumerate(competition.spots, 5):
+        product, cheapest = spot.product, spot.cheapest
+        values = [product.marketplace, product.article, _cell_value(product.name), product.price,
+                  f"{spot.rank} из {spot.total}" if spot.rank else None,
+                  cheapest.price if cheapest else None, spot.gap, spot.gap_pct, spot.median, spot.vs_median,
+                  product.rating, spot.rating, product.reviews_count, spot.reviews]
+        for col, value in enumerate(values, 1):
+            cell = sheet.cell(row=row, column=col, value=value)
+            cell.alignment = Alignment(vertical="top", wrap_text=col == 3)
+        sheet.cell(row=row, column=1).font = fonts.get(product.marketplace, Font())
+        for col in (4, 6, 9):
+            sheet.cell(row=row, column=col).number_format = NUMBER_FORMATS["money"]
+        sheet.cell(row=row, column=7).number_format = SIGNED_MONEY
+        for col in (8, 10):
+            sheet.cell(row=row, column=col).number_format = SIGNED_PERCENT
+        for col in (11, 12):
+            sheet.cell(row=row, column=col).number_format = NUMBER_FORMATS["rating"]
+        for col in (13, 14):
+            sheet.cell(row=row, column=col).number_format = NUMBER_FORMATS["int"]
+        place = sheet.cell(row=row, column=5)
+        place.font = DOWN_FONT if spot.rank == 1 else UP_FONT if spot.cheaper else Font()
+        if spot.gap:  # дороже самого дешёвого — повод посмотреть на цену
+            sheet.cell(row=row, column=7).font = UP_FONT
+            sheet.cell(row=row, column=8).font = UP_FONT
+        _link(sheet.cell(row=row, column=len(columns)), product.url)
+    _add_table(sheet, "Competitors", 4, 4 + len(competition.spots), len(columns))
+    sheet.freeze_panes = "D5"
+
+
+def _write_cheaper(sheet: Worksheet, competition: Competition) -> None:
+    """The cheapest rivals of each of my products: who exactly undercuts me and by how much."""
+    sheet["A1"] = "Кто дешевле меня"
+    sheet["A2"] = (f"До {RIVALS_PER_PRODUCT} самых дешёвых конкурентов на каждый мой товар — тех, кого покупатель "
+                   "видит рядом со мной по более низкой цене.")
+    sheet["A1"].font, sheet["A2"].font = TITLE_FONT, MUTED_FONT
+    columns = [("Мой артикул", 14), ("Площадка", 15), ("Конкурент", 44), ("Артикул", 14), ("Бренд", 20),
+               ("Продавец", 20), ("Цена", 12), ("Дешевле меня на", 15), ("Дешевле меня на, %", 17), ("Рейтинг", 10),
+               ("Отзывов", 11), ("Место в выдаче", 13), ("Ссылка", 11)]
+    _header_row(sheet, 4, columns)
+    fonts = marketplace_fonts()
+    row = 5
+    for spot in competition.spots:
+        for rival in spot.cheaper[:RIVALS_PER_PRODUCT]:
+            values = [spot.product.article, rival.marketplace, _cell_value(rival.name), rival.article,
+                      _cell_value(rival.brand), _cell_value(rival.seller), rival.price,
+                      _below(spot.gap_to(rival)), _below(spot.gap_pct_to(rival)),
+                      rival.rating, rival.reviews_count, rival.position]
+            for col, value in enumerate(values, 1):
+                cell = sheet.cell(row=row, column=col, value=value)
+                cell.alignment = Alignment(vertical="top", wrap_text=col == 3)
+            sheet.cell(row=row, column=2).font = fonts.get(rival.marketplace, Font())
+            sheet.cell(row=row, column=7).number_format = NUMBER_FORMATS["money"]
+            sheet.cell(row=row, column=8).number_format = SIGNED_MONEY
+            sheet.cell(row=row, column=9).number_format = SIGNED_PERCENT
+            sheet.cell(row=row, column=10).number_format = NUMBER_FORMATS["rating"]
+            sheet.cell(row=row, column=11).number_format = NUMBER_FORMATS["int"]
+            for col in (8, 9):
+                sheet.cell(row=row, column=col).font = DOWN_FONT
+            _link(sheet.cell(row=row, column=len(columns)), rival.url)
+            row += 1
+    _add_table(sheet, "Cheaper", 4, row - 1, len(columns))
+    sheet.freeze_panes = "E5"
+
+
+def _below(value: float | None) -> float | None:
+    """A rival's advantage reads as a minus: he stands this much below my price."""
+    return -value if value is not None else None

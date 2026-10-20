@@ -104,3 +104,12 @@ def test_new_settings_survive_a_roundtrip(tmp_path, monkeypatch):
     loaded = ParseSettings.load()
     assert loaded == original
     assert loaded.option("avito", "seller") == "private"
+
+
+def test_my_products_are_not_mistaken_for_a_marketplace_list(tmp_path, monkeypatch):
+    """"own_ids" ends in "_ids" like the old per-marketplace keys, but it is a setting of its own."""
+    monkeypatch.setattr(settings_module, "app_data_dir", lambda: tmp_path)
+    ParseSettings(own_ids="123456", own_names="Моя Марка").save()
+    loaded = ParseSettings.load()
+    assert (loaded.own_ids, loaded.own_names) == ("123456", "Моя Марка")
+    assert loaded.ids == {}

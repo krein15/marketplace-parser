@@ -82,6 +82,9 @@ class ParseSettings:
     options: dict[str, dict[str, Any]] = field(default_factory=dict)  # marketplace key → its filter values
     product_fields: list[str] = field(default_factory=lambda: default_keys(product_fields()))
     review_fields: list[str] = field(default_factory=lambda: default_keys(review_fields()))
+    # Which of the collected products are mine: the report lines them up against the rest of the results.
+    own_ids: str = ""  # article numbers and product links
+    own_names: str = ""  # my brand or seller names, separated by commas
     output_dir: str = field(default_factory=lambda: str(default_output_dir()))
     open_when_done: bool = True
     show_browser: bool = False
@@ -238,8 +241,9 @@ def _migrate(raw: dict) -> dict:
     raw = dict(raw)
     ids = dict(raw.get("ids") or {})
     options: dict[str, dict[str, Any]] = {k: dict(v) for k, v in (raw.get("options") or {}).items()}
+    known = {f.name for f in fields(ParseSettings)}  # "own_ids" is a setting of its own, not a marketplace
     for name in list(raw):
-        if name.endswith("_ids") and isinstance(raw[name], str):
+        if name.endswith("_ids") and name not in known and isinstance(raw[name], str):
             ids.setdefault(name.removesuffix("_ids"), raw.pop(name))
         elif name in LEGACY_OPTIONS:
             marketplace, key = LEGACY_OPTIONS[name]

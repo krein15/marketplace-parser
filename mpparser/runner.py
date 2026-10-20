@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import plugins
 from .browser import Browser, BrowserError
+from .competitors import Competition, compare_with_rivals, parse_own
 from .export.excel import build_file_name, export_to_excel
 from .inputs import collect_ids
 from .marketplaces import Cancelled, MarketplaceParser, ParserError, Reporter
@@ -33,6 +34,7 @@ class RunResult:
     started_at: datetime = field(default_factory=datetime.now)
     completed: list[str] = field(default_factory=list)  # marketplaces collected without errors
     comparison: Comparison | None = None
+    competition: Competition | None = None
 
 
 def _merge(products: list[Product], more: list[Product]) -> list[Product]:
@@ -49,6 +51,14 @@ async def _listing(parser: MarketplaceParser, link: str, limit: int, reporter: R
         return []
     reporter.log(f"{parser.title}: по ссылке на выдачу собрано товаров — {len(products)}")
     return products
+
+
+def _log_competition(reporter: Reporter, competition: Competition) -> None:
+    if not competition:
+        return
+    nobody = f", никто не дешевле — {competition.leading}" if competition.leading else ""
+    reporter.log(f"Моих товаров в выдаче: {len(competition.spots)}; "
+                 f"дешевле меня — {competition.cheaper}{nobody}")
 
 
 def _log_changes(reporter: Reporter, comparison: Comparison) -> None:
@@ -145,9 +155,12 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
             except sqlite3.Error as exc:  # the report matters more than the history
                 log.exception("History update failed")
                 reporter.warn(f"Не удалось обновить историю цен: {exc}")
+        result.competition = compare_with_rivals(result.products,
+                                                 parse_own(settings.own_ids, settings.own_names))
+        _log_competition(reporter, result.competition)
         path = Path(settings.output_dir) / build_file_name(settings, result.started_at)
         export_to_excel(path, settings, result.products, result.reviews, result.started_at, result.comparison,
-                        dynamics, positions)
+                        dynamics, positions, result.competition)
         result.path = path
         reporter.log(f"Файл сохранён: {path}", "success")
     elif not result.errors and not result.cancelled:

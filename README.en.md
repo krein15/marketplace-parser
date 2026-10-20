@@ -28,6 +28,9 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
 - **Price monitoring.** A task remembers the settings and runs every day through Windows Task Scheduler.
   The report then gains the "Изменения" (cheaper, dearer, new, gone), "Динамика цен" (price history)
   and "Позиции" (places in search results) sheets.
+- **Competitor comparison.** Mark your own products — by article number, link or brand name — and the
+  report gains the "Конкуренты" and "Кто дешевле" sheets: your place by price, the gap to the cheapest
+  offer, the deviation from the median, your rating and reviews against the market.
 - **Filters.** Price for every marketplace; WB delivery region (25 cities); Market rating from 4.0 and delivery
   time; the delivery address for Ozon and Market is chosen once in the parser's browser.
 - **Reviews.** Up to 1000 recent reviews per product: date, score, text, pros, cons, seller reply.
@@ -58,6 +61,10 @@ count, "useful" votes, seller reply (WB).
 
 **Summary** — run parameters and active filters, per-marketplace totals (count, minimum, average, median and
 maximum price, average discount and rating), top 10 brands and sellers, a price-distribution chart.
+
+**Competitors** and **Who is cheaper** appear when the "Мои товары" tab says which products are yours:
+your price against the same search (place by price, the lowest price, the gap in ₽ and %, the median and
+the deviation from it, rating and reviews) and every seller who undercuts you by name.
 
 **Changes**, **Price history** and **Positions** appear from the second run of a task: what got cheaper or
 dearer (with the difference in ₽ and %), what appeared, what disappeared, the prices of the last 14 runs
@@ -147,6 +154,12 @@ python app.py
 python -m mpparser --wb --ozon --ym -q "wireless headphones" -n 100 -r 20 --price-min 500 --wb-region Казань
 ```
 
+Your own products are marked the same way as in the window, and the competitor sheets appear in the report:
+
+```bash
+python -m mpparser --wb -q "wireless headphones" --own "1023385847, 932846434" --own-name "Моя Марка"
+```
+
 A saved monitoring task runs by its name — this is exactly how Windows Task Scheduler starts it:
 
 ```bash
@@ -191,6 +204,7 @@ mpparser/
     ozon.py             search, cards, reviews, card price
     yandex_market.py    search results, cards, reviews, filters
   monitoring.py         price and position history, run comparison, monitoring sheets
+  competitors.py        my products against the search: place by price, the gap, who is cheaper
   tasks.py, scheduler.py  tasks and Windows Task Scheduler
   export/excel.py       report sheets
   fields.py             registry of columns

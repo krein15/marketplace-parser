@@ -50,6 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
         for option in marketplace.options:
             _add_option(filters, key, marketplace.title, option)
 
+    mine = parser.add_argument_group("мои товары")
+    mine.add_argument("--own", default="", metavar="АРТИКУЛЫ",
+                      help="мои артикулы или ссылки через запятую — в отчёт попадёт лист «Конкуренты»")
+    mine.add_argument("--own-name", default="", metavar="НАЗВАНИЕ",
+                      help="мой бренд или продавец (несколько — через запятую)")
+
     parser.add_argument("-n", "--max-products", type=int, default=100)
     parser.add_argument("-r", "--reviews", type=int, default=0, metavar="N", help="отзывов на товар (0 — не собирать)")
     parser.add_argument("--sort", choices=[s.value for s in SortOrder], default=SortOrder.POPULAR.value)
@@ -107,6 +113,8 @@ def main(argv: list[str] | None = None) -> int:
         sort=SortOrder(args.sort),
         collect_reviews=args.reviews > 0,
         max_reviews=max(args.reviews, 1),
+        own_ids=args.own,
+        own_names=args.own_name,
         show_browser=args.show_browser,
         open_when_done=False,
     )
