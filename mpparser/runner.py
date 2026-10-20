@@ -15,7 +15,8 @@ from .export.excel import build_file_name, export_to_excel
 from .inputs import collect_ids
 from .marketplaces import Cancelled, MarketplaceParser, ParserError, Reporter
 from .models import Product, Review
-from .monitoring import STATUS_ORDER, Comparison, update_history
+from .monitoring import STATUS_ORDER, Comparison, Positions, update_history
+from .notify import notify
 from .settings import InputMode, ParseSettings, app_data_dir
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class RunResult:
     completed: list[str] = field(default_factory=list)  # marketplaces collected without errors
     comparison: Comparison | None = None
     competition: Competition | None = None
+    positions: Positions | None = None
 
 
 def _merge(products: list[Product], more: list[Product]) -> list[Product]:
@@ -145,10 +147,10 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
         reporter.log(str(exc), "error")
 
     if result.products:
-        dynamics = positions = None
+        dynamics = None
         if not result.cancelled and result.completed:
             try:
-                result.comparison, dynamics, positions = update_history(
+                result.comparison, dynamics, result.positions = update_history(
                     app_data_dir() / "history.sqlite", settings,
                     result.started_at, result.completed, result.products)
                 _log_changes(reporter, result.comparison)
@@ -160,9 +162,11 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
         _log_competition(reporter, result.competition)
         path = Path(settings.output_dir) / build_file_name(settings, result.started_at)
         export_to_excel(path, settings, result.products, result.reviews, result.started_at, result.comparison,
-                        dynamics, positions, result.competition)
+                        dynamics, result.positions, result.competition)
         result.path = path
         reporter.log(f"Файл сохранён: {path}", "success")
+        if notify(settings, result, reporter.warn):
+            reporter.log("Отчёт отправлен в Telegram")
     elif not result.errors and not result.cancelled:
         reporter.warn("Товары не найдены — файл не создан.")
     reporter.set_span(1, 1)

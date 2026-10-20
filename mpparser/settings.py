@@ -87,6 +87,9 @@ class ParseSettings:
     own_names: str = ""  # my brand or seller names, separated by commas
     output_dir: str = field(default_factory=lambda: str(default_output_dir()))
     open_when_done: bool = True
+    # Where the news about a finished run goes. The bot itself is set up once, in notify.py.
+    notify: bool = False
+    notify_file: bool = True
     show_browser: bool = False
     task_name: str = ""  # set when the run is a saved monitoring task: its history is kept under this name
 

@@ -24,6 +24,7 @@ from ..browser import Browser, BrowserError
 from ..fields import Field, product_fields, review_fields
 from ..inputs import parse_ids
 from ..marketplaces import Reporter
+from ..notify import BOT_HELP, NotifyError, Telegram
 from ..plugins import Marketplace, Option
 from ..runner import RunResult, run
 from ..scheduler import SchedulerError, schedule, unschedule
@@ -85,6 +86,7 @@ class App(ctk.CTk):
         self._build_monitoring(monitoring_tab)
         self._build_fields(fields_tab)
         self._build_output(output_tab)
+        self._build_notifications(output_tab)
 
         self.setup_addresses = [(mp.key, option.key) for mp in plugins.with_options()
                                 for option in mp.options if option.kind == "setup"]
@@ -593,6 +595,8 @@ class App(ctk.CTk):
         self._set_entry(self.output_dir, settings.output_dir)
         self._set_switch(self.open_when_done, settings.open_when_done)
         self._set_switch(self.show_browser, settings.show_browser)
+        self._set_switch(self.notify, settings.notify)
+        self._set_switch(self.notify_file, settings.notify_file)
         self._refresh_mode()
         self._refresh_reviews_state()
         self._refresh_marketplace_state()
@@ -694,6 +698,72 @@ class App(ctk.CTk):
         if self.settings.show_browser:
             self.show_browser.select()
         self.show_browser.pack(side="left", padx=(28, 0))
+
+    def _build_notifications(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, None, "Уведомления в Telegram",
+                           hint="После сбора бот пришлёт, что подешевело, кто дешевле вас и как изменились "
+                                "позиции в выдаче, — вместе с файлом отчёта. Это особенно нужно заданиям, "
+                                "которые запускаются сами. " + BOT_HELP)
+        card.pack(fill="x", pady=(12, 4))
+        self.telegram = Telegram.load()
+        row = ctk.CTkFrame(card.body, fg_color="transparent")
+        row.pack(fill="x")
+        row.grid_columnconfigure(0, weight=3, uniform="telegram")
+        row.grid_columnconfigure(1, weight=2, uniform="telegram")
+        self.telegram_token = self._entry_field(row, 0, "Токен бота", "123456789:AA…", self.telegram.token,
+                                                secret=True)
+        self.telegram_chat = self._entry_field(row, 1, "Chat ID", "123456789", self.telegram.chat)
+
+        switches = ctk.CTkFrame(card.body, fg_color="transparent")
+        switches.pack(fill="x", pady=(14, 0))
+        self.notify = ctk.CTkSwitch(switches, text="Присылать итоги сбора", font=theme.font(13),
+                                    text_color=theme.TEXT, progress_color=theme.ACCENT)
+        if self.settings.notify:
+            self.notify.select()
+        self.notify.pack(side="left")
+        self.notify_file = ctk.CTkSwitch(switches, text="Прикладывать файл отчёта", font=theme.font(13),
+                                         text_color=theme.TEXT, progress_color=theme.ACCENT)
+        if self.settings.notify_file:
+            self.notify_file.select()
+        self.notify_file.pack(side="left", padx=(28, 0))
+        neutral_button(switches, "Проверить связь", self._test_telegram, width=150).pack(side="right")
+
+    def _entry_field(self, row: ctk.CTkFrame, column: int, label: str, placeholder: str, value: str,
+                     secret: bool = False) -> ctk.CTkEntry:
+        box = ctk.CTkFrame(row, fg_color="transparent")
+        box.grid(row=0, column=column, sticky="ew", padx=(0, 14) if column == 0 else 0)
+        ctk.CTkLabel(box, text=label, font=theme.font(12), text_color=theme.TEXT_MUTED).pack(anchor="w")
+        entry = ctk.CTkEntry(box, height=34, font=theme.font(13), border_width=1, fg_color=theme.INPUT_BG,
+                             border_color=theme.CARD_BORDER, text_color=theme.TEXT, placeholder_text=placeholder,
+                             show="•" if secret else "")
+        if value:
+            entry.insert(0, value)
+        entry.pack(fill="x", pady=(4, 0))
+        return entry
+
+    def _save_telegram(self) -> Telegram:
+        """The bot is set up once for the whole program, so it lives next to the settings, not inside a task."""
+        telegram = Telegram(token=self.telegram_token.get().strip(), chat=self.telegram_chat.get().strip())
+        if telegram != self.telegram:
+            telegram.save()
+            self.telegram = telegram
+        return telegram
+
+    def _test_telegram(self) -> None:
+        telegram = self._save_telegram()
+        if not telegram.configured():
+            self._log("warning", "Заполните токен бота и Chat ID. " + BOT_HELP)
+            return
+        self._log("info", "Отправляю тестовое сообщение в Telegram…")
+
+        def work() -> None:
+            try:
+                telegram.send(f"<b>{APP_NAME}</b>\nПроверка связи: бот настроен верно.")
+                self.events.put(("log", ("success", "Telegram: сообщение доставлено.")))
+            except NotifyError as exc:
+                self.events.put(("log", ("error", str(exc))))
+
+        threading.Thread(target=work, name="telegram-test", daemon=True).start()
 
     def _build_run_panel(self, master: ctk.CTkFrame) -> None:
         panel = ctk.CTkFrame(master, fg_color=theme.CARD_BG, corner_radius=14, border_width=1,
@@ -836,7 +906,10 @@ class App(ctk.CTk):
             output_dir=self.output_dir.get().strip(),
             open_when_done=bool(self.open_when_done.get()),
             show_browser=bool(self.show_browser.get()),
+            notify=bool(self.notify.get()),
+            notify_file=bool(self.notify_file.get()),
         )
+        self._save_telegram()
         problems += settings.validate()
         self.settings = settings
         settings.save()
@@ -1018,6 +1091,7 @@ class App(ctk.CTk):
             self.settings.query = self.query.get().strip()
             self.settings.output_dir = self.output_dir.get().strip()
             self.settings.save()
+            self._save_telegram()
         except Exception:
             log.debug("Could not save settings on exit", exc_info=True)
 

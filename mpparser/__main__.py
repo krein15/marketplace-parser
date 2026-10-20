@@ -56,6 +56,9 @@ def build_parser() -> argparse.ArgumentParser:
     mine.add_argument("--own-name", default="", metavar="НАЗВАНИЕ",
                       help="мой бренд или продавец (несколько — через запятую)")
 
+    parser.add_argument("--notify", action="store_true",
+                        help="прислать итоги в Telegram (бот настраивается в окне программы)")
+
     parser.add_argument("-n", "--max-products", type=int, default=100)
     parser.add_argument("-r", "--reviews", type=int, default=0, metavar="N", help="отзывов на товар (0 — не собирать)")
     parser.add_argument("--sort", choices=[s.value for s in SortOrder], default=SortOrder.POPULAR.value)
@@ -115,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         max_reviews=max(args.reviews, 1),
         own_ids=args.own,
         own_names=args.own_name,
+        notify=args.notify,
         show_browser=args.show_browser,
         open_when_done=False,
     )

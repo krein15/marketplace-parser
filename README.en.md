@@ -28,6 +28,8 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
 - **Price monitoring.** A task remembers the settings and runs every day through Windows Task Scheduler.
   The report then gains the "Изменения" (cheaper, dearer, new, gone), "Динамика цен" (price history)
   and "Позиции" (places in search results) sheets.
+- **Telegram notifications.** When a run finishes the bot sends the news and the report file itself,
+  so a scheduled task works on its own and the result lands in a chat.
 - **Competitor comparison.** Mark your own products — by article number, link or brand name — and the
   report gains the "Конкуренты" and "Кто дешевле" sheets: your place by price, the gap to the cheapest
   offer, the deviation from the median, your rating and reviews against the market.
@@ -148,6 +150,19 @@ pip install -r requirements.txt
 python app.py
 ```
 
+### Telegram notifications
+
+On the "Сохранение" tab switch "Присылать итоги сбора" on and point the program at a bot:
+
+1. Send [@BotFather](https://t.me/BotFather) the `/newbot` command — it gives you a token like `123456789:AA…`.
+2. Send your own bot a `/start`, otherwise it is not allowed to write to you.
+3. Ask [@userinfobot](https://t.me/userinfobot) for your Chat ID and press "Проверить связь" — a test message
+   arrives.
+
+The token and the chat id are kept next to the settings (`telegram.json`) on your machine. After a run the bot
+sends what got cheaper or dearer, who undercuts you and how the places moved — and the report file itself when
+it is under 50 MB.
+
 ### Command line
 
 ```bash
@@ -205,6 +220,7 @@ mpparser/
     yandex_market.py    search results, cards, reviews, filters
   monitoring.py         price and position history, run comparison, monitoring sheets
   competitors.py        my products against the search: place by price, the gap, who is cheaper
+  notify.py             Telegram notifications: the message and the file
   tasks.py, scheduler.py  tasks and Windows Task Scheduler
   export/excel.py       report sheets
   fields.py             registry of columns
@@ -232,7 +248,8 @@ tests/                  tests and fixtures
 
 ## Roadmap
 
-- Telegram notifications about notable price changes.
+- Proxies for large exports.
+- A list of queries in one run.
 - Export to Google Sheets.
 - More marketplaces as separate modules.
 
