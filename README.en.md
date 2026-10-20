@@ -48,6 +48,10 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
 |---|---|
 | ![Filters](docs/screenshots/app-filters.png) | ![Monitoring](docs/screenshots/app-monitoring.png) |
 
+| My products among the rivals | Telegram notifications |
+|---|---|
+| ![My products](docs/screenshots/app-own.png) | ![Notifications](docs/screenshots/app-notify.png) |
+
 Excel columns are picked with checkboxes; the dark theme is switched in the header:
 
 ![Column picker](docs/screenshots/app-fields.png)

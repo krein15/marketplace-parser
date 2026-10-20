@@ -68,6 +68,10 @@ def main() -> None:
             box.delete("1.0", "end")
             box.insert("1.0", marketplace.ids_placeholder if marketplace else "")
             app._update_ids_counter(key)
+    if tab == "Сохранение":
+        app.notify.select()
+        app.telegram_token.insert(0, "123456789:AA-demo-token-not-a-real-one")
+        app.telegram_chat.insert(0, "123456789")
     if tab:
         app.tabs.set(tab)
         if tab == "Мониторинг":

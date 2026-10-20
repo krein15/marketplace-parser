@@ -4,7 +4,7 @@ Wildberries, Ozon and Yandex Market come with the program; other marketplaces ar
 (see ``mpparser/plugins.py``).
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 # Also names the data folder (%LOCALAPPDATA%\MarketplaceParser), where settings, saved tasks,
 # the price history and the browser profile are kept.
 APP_NAME = "Marketplace Parser"

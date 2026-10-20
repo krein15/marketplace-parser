@@ -46,6 +46,10 @@
 |---|---|
 | ![Фильтры](docs/screenshots/app-filters.png) | ![Мониторинг](docs/screenshots/app-monitoring.png) |
 
+| Мои товары среди конкурентов | Уведомления в Telegram |
+|---|---|
+| ![Мои товары](docs/screenshots/app-own.png) | ![Уведомления](docs/screenshots/app-notify.png) |
+
 Колонки Excel выбираются галочками, тёмная тема переключается в шапке:
 
 ![Выбор колонок](docs/screenshots/app-fields.png)
