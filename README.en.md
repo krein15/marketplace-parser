@@ -228,5 +228,6 @@ Need a similar scraper or a custom version? Get in touch.
 - Telegram: [@krein1](https://t.me/krein1)
 - Email: [reinkolya@gmail.com](mailto:reinkolya@gmail.com)
 - GitHub: [krein15](https://github.com/krein15)
+- Website: https://kreinstudio.ru/
 
 Licensed under the [MIT License](LICENSE).
