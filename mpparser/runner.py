@@ -135,18 +135,19 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
         reporter.log(str(exc), "error")
 
     if result.products:
-        dynamics = None
+        dynamics = positions = None
         if not result.cancelled and result.completed:
             try:
-                result.comparison, dynamics = update_history(app_data_dir() / "history.sqlite", settings,
-                                                             result.started_at, result.completed, result.products)
+                result.comparison, dynamics, positions = update_history(
+                    app_data_dir() / "history.sqlite", settings,
+                    result.started_at, result.completed, result.products)
                 _log_changes(reporter, result.comparison)
             except sqlite3.Error as exc:  # the report matters more than the history
                 log.exception("History update failed")
                 reporter.warn(f"Не удалось обновить историю цен: {exc}")
         path = Path(settings.output_dir) / build_file_name(settings, result.started_at)
         export_to_excel(path, settings, result.products, result.reviews, result.started_at, result.comparison,
-                        dynamics)
+                        dynamics, positions)
         result.path = path
         reporter.log(f"Файл сохранён: {path}", "success")
     elif not result.errors and not result.cancelled:

@@ -400,8 +400,8 @@ class App(ctk.CTk):
     def _build_monitoring(self, parent: ctk.CTkBaseClass) -> None:
         save = SectionCard(parent, None, "Сохранить текущие настройки как задание",
                            hint="Задание запоминает вкладки «Сбор», «Фильтры», «Колонки Excel» и «Сохранение». "
-                                "Каждый запуск сравнивается с прошлым: в отчёте появятся листы «Изменения» "
-                                "и «Динамика цен».")
+                                "Каждый запуск сравнивается с прошлым: в отчёте появятся листы «Изменения», "
+                                "«Динамика цен» и «Позиции».")
         save.pack(fill="x", pady=(0, 10))
         row = ctk.CTkFrame(save.body, fg_color="transparent")
         row.pack(fill="x")

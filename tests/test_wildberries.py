@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 import pytest
 
-from mpparser.marketplaces.wildberries import MediaHosts, parse_feedback, parse_product
+from mpparser.marketplaces.base import Reporter
+from mpparser.marketplaces.wildberries import MediaHosts, WildberriesParser, parse_feedback, parse_product
 from mpparser.models import Product
+from mpparser.settings import ParseSettings, SortOrder
 
 UPSTREAMS = {
     "origin": {
@@ -98,3 +101,67 @@ def test_media_host_ranges(article, expected):
 def test_media_host_is_unknown_for_a_new_range():
     assert MediaHosts(UPSTREAMS).base_url("1470151551") is None
     assert MediaHosts(None).base_url("150017236") is None
+
+
+# --- почти пустая выдача ---
+
+
+async def _no_wait(_seconds: float) -> None:
+    """Повторы ждут по несколько секунд — в тестах ждать нечего."""
+
+
+class FakeSearch:
+    """Отдаёт заранее заданные ответы поиска, по одному на попытку."""
+
+    def __init__(self, *answers: dict) -> None:
+        self.answers = list(answers)
+        self.sessions = 0
+
+    async def page(self, *_args: object) -> dict:
+        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+
+    async def session(self) -> None:
+        self.sessions += 1
+
+
+def first_page(fake: FakeSearch, messages: list[str], answer: dict) -> tuple[dict, list[dict]]:
+    """Прогоняет разбор первой страницы выдачи с подменёнными ответами сайта."""
+    parser = WildberriesParser.__new__(WildberriesParser)
+    parser.settings = ParseSettings(query="наушники")
+    parser.reporter = Reporter(on_log=lambda _level, message: messages.append(message))
+    parser._search_page = fake.page
+    parser._capture_session = fake.session
+    return asyncio.run(parser._first_page("наушники", SortOrder.POPULAR, answer, answer["products"]))
+
+
+def test_an_almost_empty_first_page_is_asked_again(monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", _no_wait)
+    one = {"total": 90000, "products": [{"id": 1}]}  # так выглядит сбойный ответ сайта
+    full = {"total": 90000, "products": [{"id": i} for i in range(100)]}
+    messages: list[str] = []
+    fake = FakeSearch(full)  # повторный запрос отдаёт нормальную выдачу
+    data, items = first_page(fake, messages, one)
+    assert len(items) == 100
+    assert data["total"] == 90000
+    assert fake.sessions == 1  # токен обновили один раз, этого хватило
+    assert messages == []
+
+
+def test_a_search_that_really_has_one_product_is_not_retried(monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", _no_wait)
+    single = {"total": 1, "products": [{"id": 1}]}
+    messages: list[str] = []
+    fake = FakeSearch(single)
+    _, items = first_page(fake, messages, single)
+    assert len(items) == 1
+    assert fake.sessions == 0 and messages == []
+
+
+def test_a_stubbornly_empty_search_warns_the_user(monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", _no_wait)
+    empty = {"total": 90000, "products": []}
+    messages: list[str] = []
+    fake = FakeSearch(empty)
+    _, items = first_page(fake, messages, empty)
+    assert items == []
+    assert any("почти пустую выдачу" in message for message in messages)

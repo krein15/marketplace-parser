@@ -1,4 +1,4 @@
-"""Excel report: "Сводка", "Изменения", "Товары", "Отзывы" and "Динамика цен" sheets."""
+"""Excel report: "Сводка", "Изменения", "Товары", "Отзывы", "Позиции" and "Динамика цен" sheets."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from .. import plugins
 from ..fields import Field, product_fields, resolve, review_fields
 from ..models import Product, Review
-from ..monitoring import CHEAPER, GONE, NEW, PRICIER, STATUS_ORDER, Comparison, Dynamics
+from ..monitoring import CHEAPER, GONE, NEW, PRICIER, STATUS_ORDER, Comparison, Dynamics, Positions
 from ..settings import SORT_TITLES, InputMode, ParseSettings
 
 HEADER_FILL = PatternFill("solid", fgColor="2B2D42")
@@ -74,6 +74,7 @@ def export_to_excel(
     started_at: datetime,
     comparison: Comparison | None = None,
     dynamics: Dynamics | None = None,
+    positions: Positions | None = None,
 ) -> Path:
     workbook = Workbook()
     products_sheet = workbook.active
@@ -86,6 +87,8 @@ def export_to_excel(
     _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at, comparison)
     if comparison is not None:
         _write_changes(workbook.create_sheet("Изменения", 1), comparison)
+    if positions is not None and positions.rows:
+        _write_positions(workbook.create_sheet("Позиции"), positions)
     if dynamics is not None and len(dynamics.dates) >= 2:
         _write_dynamics(workbook.create_sheet("Динамика цен"), dynamics)
     workbook.active = 0
@@ -415,3 +418,35 @@ def _write_dynamics(sheet: Worksheet, dynamics: Dynamics) -> None:
         _link(sheet.cell(row=row, column=len(columns)), product.url)
     _add_table(sheet, "Dynamics", 4, 4 + len(dynamics.rows), len(columns))
     sheet.freeze_panes = "D5"
+
+
+def _write_positions(sheet: Worksheet, positions: Positions) -> None:
+    """Where each product stands in search results and how that place moved between runs."""
+    sheet["A1"] = "Позиции в выдаче"
+    sheet["A2"] = ("Место товара в выдаче по этому запросу. Сверху — те, кто сильнее опустился. "
+                   "«Движение» — сколько мест товар прошёл с первого запуска, где его видели: "
+                   "плюс значит поднялся. Пустая клетка — товара в выдаче не было.")
+    sheet["A1"].font, sheet["A2"].font = TITLE_FONT, MUTED_FONT
+    columns = [("Площадка", 15), ("Артикул", 14), ("Название", 44), ("Место сейчас", 12), ("Движение", 11),
+               *((f"{date:%d.%m %H:%M}", 12) for date in positions.dates), ("Ссылка", 11)]
+    _header_row(sheet, 4, columns)
+    fonts = marketplace_fonts()
+    for row, (product, places) in enumerate(positions.rows, 5):
+        sheet.cell(row=row, column=1, value=product.marketplace).font = fonts.get(product.marketplace, Font())
+        sheet.cell(row=row, column=2, value=product.article)
+        sheet.cell(row=row, column=3, value=_cell_value(product.name)).alignment = Alignment(vertical="top")
+        sheet.cell(row=row, column=4, value=product.position)
+        rise = positions.rise(places)
+        moved = sheet.cell(row=row, column=5, value=rise)
+        moved.number_format = "+0;-0;0"
+        if rise:
+            moved.font = DOWN_FONT if rise > 0 else UP_FONT  # выше в выдаче — хорошо, ниже — плохо
+        previous = None
+        for offset, place in enumerate(places):
+            cell = sheet.cell(row=row, column=6 + offset, value=place)
+            if place is not None and previous is not None and place != previous:
+                cell.font = DOWN_FONT if place < previous else UP_FONT
+            previous = place if place is not None else previous
+        _link(sheet.cell(row=row, column=len(columns)), product.url)
+    _add_table(sheet, "Positions", 4, 4 + len(positions.rows), len(columns))
+    sheet.freeze_panes = "F5"

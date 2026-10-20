@@ -26,7 +26,8 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
 - **Three ways to say what to collect.** A search query, a list of article numbers and product links, or a link
   to search results with the filters already set on the site.
 - **Price monitoring.** A task remembers the settings and runs every day through Windows Task Scheduler.
-  The report then gains the "Изменения" (cheaper, dearer, new, gone) and "Динамика цен" (price history) sheets.
+  The report then gains the "Изменения" (cheaper, dearer, new, gone), "Динамика цен" (price history)
+  and "Позиции" (places in search results) sheets.
 - **Filters.** Price for every marketplace; WB delivery region (25 cities); Market rating from 4.0 and delivery
   time; the delivery address for Ozon and Market is chosen once in the parser's browser.
 - **Reviews.** Up to 1000 recent reviews per product: date, score, text, pros, cons, seller reply.
@@ -58,8 +59,9 @@ count, "useful" votes, seller reply (WB).
 **Summary** — run parameters and active filters, per-marketplace totals (count, minimum, average, median and
 maximum price, average discount and rating), top 10 brands and sellers, a price-distribution chart.
 
-**Changes** and **Price history** appear from the second run of a task: what got cheaper or dearer (with the
-difference in ₽ and %), what appeared, what disappeared, and the prices of the last 14 runs.
+**Changes**, **Price history** and **Positions** appear from the second run of a task: what got cheaper or
+dearer (with the difference in ₽ and %), what appeared, what disappeared, the prices of the last 14 runs
+and how many places every product moved up or down the search results.
 
 ## How it works
 
@@ -188,7 +190,7 @@ mpparser/
     wildberries.py      search, cards, reviews, photos, region
     ozon.py             search, cards, reviews, card price
     yandex_market.py    search results, cards, reviews, filters
-  monitoring.py         price history, run comparison, "Changes" and "Price history"
+  monitoring.py         price and position history, run comparison, monitoring sheets
   tasks.py, scheduler.py  tasks and Windows Task Scheduler
   export/excel.py       report sheets
   fields.py             registry of columns

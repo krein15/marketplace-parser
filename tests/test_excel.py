@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 
 from mpparser.export.excel import build_file_name, export_to_excel, price_buckets
 from mpparser.models import Product, Review
-from mpparser.monitoring import CHEAPER, GONE, Change, Comparison, Dynamics
+from mpparser.monitoring import CHEAPER, GONE, Change, Comparison, Dynamics, Positions
 from mpparser.settings import InputMode, ParseSettings
 
 
@@ -156,6 +156,28 @@ def test_changes_and_dynamics_sheets(tmp_path, products, reviews):
     summary = [row[0] for row in workbook["Сводка"].iter_rows(values_only=True)]
     assert "Изменения с прошлого запуска" in summary and "Подешевели" in summary and "Задание" in summary
     assert "Выпали из выдачи" in summary
+
+
+def test_positions_sheet(tmp_path, products, reviews):
+    wb_product, ozon_product = products
+    wb_product.position, ozon_product.position = 1, 12
+    positions = Positions([datetime(2026, 9, 17, 9, 0), datetime(2026, 9, 18, 10, 0)],
+                          [(ozon_product, [5, 12]), (wb_product, [3, 1])])
+    path = tmp_path / "report.xlsx"
+    export_to_excel(path, ParseSettings(query="наушники"), products, reviews, datetime(2026, 9, 18, 10, 0),
+                    positions=positions)
+    sheet = load_workbook(path)["Позиции"]
+    assert [c.value for c in sheet[4]][:5] == ["Площадка", "Артикул", "Название", "Место сейчас", "Движение"]
+    assert [c.value for c in sheet[5]][:5] == ["Ozon", "2", "Наушники Ozon", 12, -7]  # опустился на 7 мест
+    assert [c.value for c in sheet[6]][:5] == ["Wildberries", "1", "Наушники WB", 1, 2]
+    assert [c.value for c in sheet[5]][5:7] == [5, 12]
+
+
+def test_positions_sheet_is_skipped_without_places(tmp_path, products, reviews):
+    path = tmp_path / "report.xlsx"
+    export_to_excel(path, ParseSettings(query="q"), products, reviews, datetime(2026, 9, 18),
+                    positions=Positions([datetime(2026, 9, 18)], []))
+    assert "Позиции" not in load_workbook(path).sheetnames
 
 
 def test_first_run_changes_sheet_explains_itself(tmp_path, products, reviews):

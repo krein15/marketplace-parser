@@ -36,6 +36,7 @@ UPSTREAMS_URL = "https://cdn.wbbasket.ru/api/v3/upstreams"
 
 SEARCH_PAGE_SIZE = 100
 SEARCH_MAX_PAGES = 100  # WB does not return results beyond page 100
+FIRST_PAGE_ATTEMPTS = 3  # how many times to ask again when the first page comes back almost empty
 DETAIL_BATCH = 50
 
 MAX_PRICE = 100_000_000  # upper bound of an open-ended price filter, rubles
@@ -206,6 +207,28 @@ class WildberriesParser(MarketplaceParser):
     def _dest(self) -> int:
         return wb_dest(self.option("region"))
 
+    async def _first_page(self, query: str, sort: SortOrder, data: dict[str, Any],
+                          items: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """WB sometimes answers a search with one product or none at all, while the site shows thousands.
+
+        Such an answer must not reach the report: in monitoring it would look like everything dropped out of
+        the search results. A fresh token and a short pause usually fix it; if they do not, say so out loud.
+        """
+        for attempt in range(FIRST_PAGE_ATTEMPTS):
+            if len(items) > 1 or (data.get("total") or 0) <= len(items):
+                return data, items
+            self.reporter.check_cancel()
+            await asyncio.sleep(2 * (attempt + 1))
+            await self._capture_session()
+            retry = await self._search_page(query, sort, 1)
+            retry_items = retry.get("products") or []
+            if len(retry_items) > len(items):
+                data, items = retry, retry_items
+        if len(items) <= 1 and (data.get("total") or 0) > len(items):
+            self.reporter.warn("Wildberries: сайт вернул почти пустую выдачу — в отчёте будет мало товаров. "
+                               "Повторите сбор через несколько минут.")
+        return data, items
+
     async def search(self, query: str, limit: int, sort: SortOrder) -> list[Product]:
         products: list[Product] = []
         seen: set[str] = set()
@@ -214,14 +237,7 @@ class WildberriesParser(MarketplaceParser):
             data = await self._search_page(query, sort, page_no)
             items = data.get("products") or (data.get("data") or {}).get("products") or []
             if page_no == 1:
-                if len(items) <= 1:
-                    # WB occasionally answers a freshly issued token with an almost empty result set.
-                    await asyncio.sleep(2)
-                    await self._capture_session()
-                    retry = await self._search_page(query, sort, page_no)
-                    retry_items = retry.get("products") or []
-                    if len(retry_items) > len(items):
-                        data, items = retry, retry_items
+                data, items = await self._first_page(query, sort, data, items)
                 self.reporter.log(f"Wildberries: найдено товаров по запросу — {data.get('total', len(items))}")
             for item in items:
                 product = parse_product(item, position=len(products) + 1)

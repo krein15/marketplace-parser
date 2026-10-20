@@ -1,4 +1,4 @@
-"""Price history between runs: what changed since the previous run of the same job.
+"""History between runs: what changed since the previous run of the same job — prices and places in search.
 
 A job is a saved task (``task:<name>``) or, for a run started by hand, the combination of what is collected —
 marketplaces, query or links, filters — so that running the same search again compares it with the last time.
@@ -40,9 +40,12 @@ CREATE TABLE IF NOT EXISTS prices (
     name TEXT,
     price REAL,
     url TEXT,
+    position INTEGER,
     PRIMARY KEY (run_id, marketplace, article)
 );
 """
+# Databases written by version 2.1 and earlier have no "position" column.
+MIGRATIONS = {"position": "ALTER TABLE prices ADD COLUMN position INTEGER"}
 
 CHEAPER, PRICIER, NEW, GONE = "Подешевел", "Подорожал", "Новый", "Пропал"
 STATUS_ORDER = (CHEAPER, PRICIER, NEW, GONE)
@@ -95,6 +98,7 @@ class Snapshot:
     name: str
     price: float | None
     url: str
+    position: int | None = None  # place in search results, 1 is the top
 
 
 @dataclass
@@ -113,6 +117,15 @@ class Change:
     url: str
     old_price: float | None = None
     new_price: float | None = None
+    old_position: int | None = None
+    new_position: int | None = None
+
+    @property
+    def rise(self) -> int | None:
+        """How many places the product moved up; negative means it moved down."""
+        if self.old_position is None or self.new_position is None:
+            return None
+        return self.old_position - self.new_position
 
     @property
     def delta(self) -> float | None:
@@ -152,6 +165,25 @@ class Dynamics:
     rows: list[tuple[Product, list[float | None]]]
 
 
+@dataclass
+class Positions:
+    """Places of the current products in search results over the last runs, oldest first.
+
+    Rows are sorted by how far a product moved: the biggest drops first, because that is what a seller
+    wants to see. Products collected by article number have no place and are left out.
+    """
+
+    dates: list[datetime]
+    rows: list[tuple[Product, list[int | None]]]
+
+    def rise(self, places: Sequence[int | None]) -> int | None:
+        """Places gained since the earliest run where the product was seen; negative means it dropped."""
+        seen = [place for place in places if place is not None]
+        if len(seen) < 2:
+            return None
+        return seen[0] - seen[-1]
+
+
 def compare(previous: PreviousRun | None, products: Sequence[Product], marketplaces: Sequence[str]) -> Comparison:
     """Changes between the previous run and ``products`` for the marketplaces collected fully both times."""
     if previous is None:
@@ -166,7 +198,8 @@ def compare(previous: PreviousRun | None, products: Sequence[Product], marketpla
         current.add(key)
         before = previous.items.get(key)
         change = Change("", product.marketplace, product.article, product.name, product.url,
-                        before.price if before else None, product.price)
+                        before.price if before else None, product.price,
+                        before.position if before else None, product.position)
         if before is None:
             change.status = NEW
         elif change.delta is not None and abs(change.delta) >= MIN_DELTA:
@@ -176,7 +209,8 @@ def compare(previous: PreviousRun | None, products: Sequence[Product], marketpla
         changes.append(change)
     for (marketplace, article), before in previous.items.items():
         if marketplace in compared and (marketplace, article) not in current:
-            changes.append(Change(GONE, marketplace, article, before.name, before.url, before.price, None))
+            changes.append(Change(GONE, marketplace, article, before.name, before.url, before.price, None,
+                                  before.position, None))
 
     def order(change: Change) -> tuple[int, float]:
         # Biggest price drops and rises first; new and gone items keep the marketplace order.
@@ -191,6 +225,11 @@ class History:
         self.path = path
         with closing(self._connect()) as db, db:
             db.executescript(SCHEMA)
+            columns = {row[1] for row in db.execute("PRAGMA table_info (prices)")}
+            for column, statement in MIGRATIONS.items():
+                if column not in columns:
+                    log.info("History: adding the %s column", column)
+                    db.execute(statement)
 
     def _connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -204,9 +243,10 @@ class History:
                              "ORDER BY started_at DESC LIMIT 1", (job,)).fetchone()
             if run is None:
                 return None
-            rows = db.execute("SELECT marketplace, article, name, price, url FROM prices WHERE run_id = ?",
-                              (run[0],)).fetchall()
-        items = {(m, a): Snapshot(name or "", price, url or "") for m, a, name, price, url in rows}
+            rows = db.execute("SELECT marketplace, article, name, price, url, position FROM prices "
+                              "WHERE run_id = ?", (run[0],)).fetchall()
+        items = {(m, a): Snapshot(name or "", price, url or "", position)
+                 for m, a, name, price, url, position in rows}
         return PreviousRun(datetime.fromisoformat(run[1]), json.loads(run[2]), items)
 
     def record(self, job: str, started_at: datetime, marketplaces: Sequence[str],
@@ -218,9 +258,9 @@ class History:
                                  json.dumps(list(marketplaces), ensure_ascii=False)))
             run_id = int(cursor.lastrowid or 0)
             db.executemany(
-                "INSERT OR IGNORE INTO prices (run_id, marketplace, article, name, price, url) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                [(run_id, p.marketplace, p.article, p.name, p.price, p.url)
+                "INSERT OR IGNORE INTO prices (run_id, marketplace, article, name, price, url, position) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [(run_id, p.marketplace, p.article, p.name, p.price, p.url, p.position)
                  for p in products if p.marketplace in marketplaces],
             )
         return run_id
@@ -237,13 +277,30 @@ class History:
         table = [(p, [prices.get((run_id, p.marketplace, p.article)) for run_id in ids]) for p in products]
         return Dynamics([datetime.fromisoformat(started) for _, started in recent], table)
 
+    def positions(self, job: str, products: Sequence[Product], runs: int = DYNAMICS_RUNS) -> Positions:
+        """Places of ``products`` in search results over the last runs, biggest drops first."""
+        with closing(self._connect()) as db:
+            recent = db.execute("SELECT id, started_at FROM runs WHERE job = ? ORDER BY started_at DESC LIMIT ?",
+                                (job, runs)).fetchall()[::-1]
+            ids = [run_id for run_id, _ in recent]
+            marks = ",".join("?" * len(ids))
+            rows = db.execute(f"SELECT run_id, marketplace, article, position FROM prices "
+                              f"WHERE run_id IN ({marks})", ids).fetchall() if ids else []
+        places = {(run_id, m, a): position for run_id, m, a, position in rows}
+        table = [(p, [places.get((run_id, p.marketplace, p.article)) for run_id in ids])
+                 for p in products if p.position is not None]
+        dates = [datetime.fromisoformat(started) for _, started in recent]
+        result = Positions(dates, table)
+        result.rows.sort(key=lambda row: (result.rise(row[1]) is None, result.rise(row[1]) or 0))
+        return result
+
     def forget(self, job: str) -> None:
         with closing(self._connect()) as db, db:
             db.execute("DELETE FROM runs WHERE job = ?", (job,))
 
 
 def update_history(path: Path, settings: ParseSettings, started_at: datetime, completed: Sequence[str],
-                   products: Sequence[Product]) -> tuple[Comparison, Dynamics]:
+                   products: Sequence[Product]) -> tuple[Comparison, Dynamics, Positions]:
     """Compare with the previous run of the same job, then record this one. ``completed`` — marketplace keys."""
     titles = [plugins.title_of(key) for key in completed]
     history = History(path)
@@ -252,4 +309,5 @@ def update_history(path: Path, settings: ParseSettings, started_at: datetime, co
     links = collect_ids({key: settings.ids_text(key) for key in settings.marketplaces}).listings
     comparison.search = settings.mode == InputMode.QUERY or any(links.values())
     history.record(job, started_at, titles, products)
-    return comparison, history.dynamics(job, [p for p in products if p.marketplace in titles])
+    collected = [p for p in products if p.marketplace in titles]
+    return comparison, history.dynamics(job, collected), history.positions(job, collected)
