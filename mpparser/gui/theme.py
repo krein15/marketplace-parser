@@ -22,6 +22,13 @@ WARNING = ("#B45309", "#F59E0B")
 NEUTRAL_BUTTON = ("#E8EAF2", "#2A2E3D")
 NEUTRAL_BUTTON_HOVER = ("#DADDE8", "#343949")
 
+# krein studio: зелёный акцент логотипа, разные оттенки для светлой и тёмной темы.
+BRAND = ("#0C9A4A", "#5CF28E")
+BRAND_HOVER = ("#0A7F3C", "#8DF7B2")
+BRAND_NAME = "kreinstudio"
+BRAND_URL = "https://kreinstudio.ru/"
+BRAND_ICON = {"light": "assets/brand/icon-light-512.png", "dark": "assets/brand/icon-dark-512.png"}
+
 FONT_FAMILY = "Segoe UI"
 
 

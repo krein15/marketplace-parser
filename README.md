@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://kreinstudio.ru/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark@2x.png">
+      <img src="docs/brand/logo-light@2x.png" alt="krein — студия разработки" width="300">
+    </picture>
+  </a>
+</p>
+
 # Marketplace Parser — товары, цены и отзывы маркетплейсов в Excel
 
 [![Тесты](https://github.com/krein15/marketplace-parser/actions/workflows/tests.yml/badge.svg)](https://github.com/krein15/marketplace-parser/actions/workflows/tests.yml)
@@ -219,7 +228,7 @@ tests/                  тесты и фикстуры
 
 ## Автор
 
-**Бондаренко Николай** — разработка парсеров и автоматизации на Python.
+**Бондаренко Николай**, [krein — студия разработки](https://kreinstudio.ru/) — парсеры и автоматизация на Python.
 Нужен похожий парсер или доработка под вашу задачу — пишите.
 
 - Telegram: [@krein1](https://t.me/krein1)

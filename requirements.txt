@@ -1,3 +1,4 @@
 patchright==1.62.3
 customtkinter==6.0.0
 openpyxl==3.1.5
+pillow==12.3.0

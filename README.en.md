@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://kreinstudio.ru/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark@2x.png">
+      <img src="docs/brand/logo-light@2x.png" alt="krein — development studio" width="300">
+    </picture>
+  </a>
+</p>
+
 # Marketplace Parser — products, prices and reviews from marketplaces into Excel
 
 [![Tests](https://github.com/krein15/marketplace-parser/actions/workflows/tests.yml/badge.svg)](https://github.com/krein15/marketplace-parser/actions/workflows/tests.yml)
@@ -213,7 +222,7 @@ tests/                  tests and fixtures
 
 ## Author
 
-**Nikolay Bondarenko** — Python developer: web scraping and automation.
+**Nikolay Bondarenko**, [krein development studio](https://kreinstudio.ru/) — web scraping and automation in Python.
 Need a similar scraper or a custom version? Get in touch.
 
 - Telegram: [@krein1](https://t.me/krein1)

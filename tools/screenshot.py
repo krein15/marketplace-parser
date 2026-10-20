@@ -43,8 +43,8 @@ def main() -> None:
         demo_task()
     ctk.set_appearance_mode(appearance)
     app = App()
+    app._set_appearance("Светлая" if appearance == "light" else "Тёмная")
     app.appearance.set("Светлая" if appearance == "light" else "Тёмная")
-    app._apply_log_colors()
     for key, variable in app.mp_vars.items():
         variable.set(True)
         app.mp_toggles[key]._refresh()

@@ -13,7 +13,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy
 
 ENTRY_POINT_GROUP = "mpparser.marketplaces"
 
-datas = [("assets/icon.ico", "assets")]
+datas = [("assets", "assets")]  # иконка программы и фирменные знаки студии
 datas += collect_data_files("patchright")  # node.exe + driver package
 datas += collect_data_files("customtkinter")  # themes and fonts
 

@@ -8,6 +8,7 @@ import os
 import queue
 import subprocess
 import threading
+import webbrowser
 from dataclasses import replace
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -16,6 +17,7 @@ from tkinter import filedialog, messagebox
 from typing import Any, ClassVar
 
 import customtkinter as ctk
+from PIL import Image
 
 from .. import APP_NAME, __version__, plugins
 from ..browser import Browser, BrowserError
@@ -111,12 +113,23 @@ class App(ctk.CTk):
     def _build_header(self) -> None:
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=24, pady=(18, 14))
-        logo = ctk.CTkLabel(header, text="MP", width=44, height=44, corner_radius=12, fg_color=theme.ACCENT,
-                            text_color="#FFFFFF", font=theme.font(17, "bold"))
+        logo = ctk.CTkLabel(header, text="", width=44, height=44, image=self._brand_icon())
         logo.pack(side="left")
+        self._open_site_on_click(logo)
+
         titles = ctk.CTkFrame(header, fg_color="transparent")
         titles.pack(side="left", padx=12)
-        ctk.CTkLabel(titles, text=APP_NAME, font=theme.font(21, "bold"), text_color=theme.TEXT).pack(anchor="w")
+        name_row = ctk.CTkFrame(titles, fg_color="transparent")
+        name_row.pack(anchor="w")
+        ctk.CTkLabel(name_row, text=APP_NAME, font=theme.font(21, "bold"),
+                     text_color=theme.TEXT).pack(side="left")
+        ctk.CTkLabel(name_row, text="by", font=theme.font(13), text_color=theme.TEXT_MUTED).pack(
+            side="left", padx=(8, 4), pady=(6, 0))
+        studio = ctk.CTkLabel(name_row, text=theme.BRAND_NAME, font=theme.font(14, "bold"),
+                              text_color=theme.BRAND)
+        studio.pack(side="left", pady=(5, 0))
+        self._open_site_on_click(studio, highlight=True)
+
         names = ", ".join(mp.title for mp in self.marketplaces.values())
         ctk.CTkLabel(titles, text=f"Товары, цены и отзывы в Excel: {names}",
                      font=theme.font(13), text_color=theme.TEXT_MUTED).pack(anchor="w")
@@ -128,6 +141,30 @@ class App(ctk.CTk):
             text_color=theme.TEXT, fg_color=theme.NEUTRAL_BUTTON)
         self.appearance.set("Системная")
         self.appearance.pack(side="right")
+
+    def _brand_icon(self) -> ctk.CTkImage | None:
+        """Studio logo for the header; None when the file is missing, then the header shows text only."""
+        try:
+            light = Image.open(theme.resource_path(theme.BRAND_ICON["light"]))
+            dark = Image.open(theme.resource_path(theme.BRAND_ICON["dark"]))
+        except OSError as exc:
+            log.warning("Brand icon is missing: %s", exc)
+            return None
+        return ctk.CTkImage(light_image=light, dark_image=dark, size=(44, 44))
+
+    def _open_site_on_click(self, widget: ctk.CTkLabel, highlight: bool = False) -> None:
+        """Make a label open the studio site, with a hand cursor and a hover colour.
+
+        CustomTkinter draws a label as a tkinter widget inside a frame, so the cursor has to be set on the
+        inner widgets as well — otherwise it only changes on the thin border around the text.
+        """
+        for inner in (widget, getattr(widget, "_label", None), getattr(widget, "_canvas", None)):
+            if inner is not None:
+                inner.configure(cursor="hand2")
+        widget.bind("<Button-1>", lambda _: webbrowser.open(theme.BRAND_URL))
+        if highlight:
+            widget.bind("<Enter>", lambda _: widget.configure(text_color=theme.BRAND_HOVER))
+            widget.bind("<Leave>", lambda _: widget.configure(text_color=theme.BRAND))
 
     def _build_marketplaces(self, parent: ctk.CTkBaseClass) -> None:
         row = ctk.CTkFrame(parent, fg_color="transparent")

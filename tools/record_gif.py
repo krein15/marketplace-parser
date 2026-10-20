@@ -33,16 +33,16 @@ def main() -> None:
     setup_logging()
     ctk.set_appearance_mode("light")
     app = App()
+    app._set_appearance("Светлая")  # иначе системная тема вернётся через несколько секунд
     app.appearance.set("Светлая")
-    app._apply_log_colors()
     for key, variable in app.mp_vars.items():
         variable.set(True)
         app.mp_toggles[key]._refresh()
     app._refresh_marketplace_state()
     app.query.delete(0, "end")
     app.query.insert(0, query)
-    app.max_products.combo.set("10")
-    app.max_reviews.combo.set("3")
+    app.max_products.combo.set("6")  # короткий демонстрационный сбор: GIF должен успеть дойти до «Готово»
+    app.max_reviews.combo.set("2")
     app.output_dir.delete(0, "end")
     app.output_dir.insert(0, str(output_dir))
     app.open_when_done.deselect()
