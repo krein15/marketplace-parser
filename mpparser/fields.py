@@ -28,6 +28,8 @@ class Field:
 CORE_PRODUCT_FIELDS: list[Field] = [
     Field("marketplace", "Площадка", width=13, required=True),
     Field("article", "Артикул", width=13, required=True),
+    # Пустая у сборов по одному запросу — такая колонка в файл не попадает (см. export/excel.py).
+    Field("query", "Запрос", width=22, required=True),
     Field("position", "Позиция", "int", width=10),
     Field("name", "Название", "wrap", width=48),
     Field("brand", "Бренд", width=18),

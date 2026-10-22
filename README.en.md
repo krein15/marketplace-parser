@@ -25,6 +25,9 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
   same set of columns.
 - **Three ways to say what to collect.** A search query, a list of article numbers and product links, or a link
   to search results with the filters already set on the site.
+- **A list of queries in one run.** One query per line: the parser walks through all of them, the
+  "Товары" sheet gains a "Запрос" column and the summary gains per-query totals. Your own products
+  are compared with the rivals of their own query.
 - **Price monitoring.** A task remembers the settings and runs every day through Windows Task Scheduler.
   The report then gains the "Изменения" (cheaper, dearer, new, gone), "Динамика цен" (price history)
   and "Позиции" (places in search results) sheets.
@@ -61,7 +64,7 @@ Excel columns are picked with checkboxes; the dark theme is switched in the head
 
 ## What the report contains
 
-**Products** — marketplace, article, position in search results, name, brand, seller and seller rating, price,
+**Products** — marketplace, article, query (when there are several), position in search results, name, brand, seller and seller rating, price,
 card price (Ozon and Market), price before discount, discount %, rating, review count, stock (Ozon), category,
 photo, link, collection timestamp.
 
@@ -188,6 +191,12 @@ A proxy is given the same way as in the window:
 python -m mpparser --wb --ozon -q "kettle" --proxy "user:password@10.0.0.1:3128"
 ```
 
+Several queries in one run — repeat `-q`:
+
+```bash
+python -m mpparser --wb -q "travel mug" -q "electric kettle" -n 100
+```
+
 A saved monitoring task runs by its name — this is exactly how Windows Task Scheduler starts it:
 
 ```bash
@@ -262,7 +271,6 @@ tests/                  tests and fixtures
 
 ## Roadmap
 
-- A list of queries in one run.
 - Export to Google Sheets.
 - More marketplaces as separate modules.
 

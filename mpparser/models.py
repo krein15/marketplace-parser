@@ -23,6 +23,7 @@ class Product:
     stock: int | None = None
     category: str = ""
     position: int | None = None
+    query: str = ""  # the query that found it, when a run collects several queries at once
     image: str = ""
     url: str = ""
     # Classifieds (Avito): where the listing is, when it was published, who sells it.

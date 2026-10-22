@@ -62,8 +62,7 @@ LINE_HEIGHT = 15
 def build_file_name(settings: ParseSettings, started_at: datetime) -> str:
     short = plugins.short_titles()
     marketplaces = "+".join(short.get(key, key) for key in settings.marketplaces)
-    subject = settings.query.strip() if settings.mode == InputMode.QUERY else "артикулы"
-    subject = settings.task_name or subject
+    subject = settings.task_name or settings.subject()
     subject = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", subject).strip()[:40].strip() or "сбор"
     return f"{marketplaces}_{subject}_{started_at:%Y-%m-%d_%H-%M-%S}.xlsx"
 
@@ -83,6 +82,8 @@ def export_to_excel(
     products_sheet = workbook.active
     products_sheet.title = "Товары"
     product_columns = resolve(product_fields(), settings.product_fields, settings.marketplaces)
+    if len({p.query for p in products if p.query}) < 2:  # одна колонка «Запрос» на всех — только мешает
+        product_columns = [column for column in product_columns if column.key != "query"]
     _write_table(products_sheet, "Products", product_columns, products, "C2")
     if settings.collect_reviews:
         review_columns = resolve(review_fields(), settings.review_fields, settings.marketplaces)
@@ -183,7 +184,8 @@ def _write_summary(
         sheet.column_dimensions[col].width = width
 
     if settings.mode == InputMode.QUERY:
-        subject = ("Поисковый запрос", settings.query.strip())
+        queries = settings.queries
+        subject = ("Поисковый запрос" if len(queries) == 1 else "Поисковые запросы", "; ".join(queries))
     else:
         subject = ("Артикулы", "список артикулов и ссылок")
     params = [
@@ -245,6 +247,25 @@ def _write_summary(
             sum(1 for r in reviews if r.marketplace == title),
         ])
     row = _small_table(sheet, row, 1, headers, stats_rows, formats)
+
+    if len(settings.queries) > 1:  # сбор по списку запросов: видно, что принёс каждый
+        row = _section(sheet, row + 1, "Итоги по запросам")
+        query_headers = ["Запрос", "Товаров", "Мин. цена", "Средняя цена", "Медиана", "Макс. цена", "Рейтинг"]
+        query_formats = [None, "#,##0", *[NUMBER_FORMATS["money"]] * 4, "0.00"]
+        query_rows = []
+        for query in settings.queries:
+            items = [p for p in products if p.query == query]
+            prices = [p.price for p in items if p.price]
+            query_rows.append([
+                query,
+                len(items),
+                min(prices, default=None),
+                _mean(prices),
+                statistics.median(prices) if prices else None,
+                max(prices, default=None),
+                _mean(p.rating for p in items if p.rating),
+            ])
+        row = _small_table(sheet, row, 1, query_headers, query_rows, query_formats)
 
     top_row = _section(sheet, row + 1, "Топ-10 брендов")
     _section(sheet, row + 1, "Топ-10 продавцов", column=6)

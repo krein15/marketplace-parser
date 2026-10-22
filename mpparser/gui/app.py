@@ -80,8 +80,7 @@ class App(ctk.CTk):
         monitoring_tab = self.tabs.add("Мониторинг")
         fields_tab = self.tabs.add("Колонки Excel")
         output_tab = self.tabs.add("Сохранение")
-        self._build_input(collect_tab)
-        self._build_options(collect_tab)
+        self._build_collect(collect_tab)
         self._build_filters(filters_tab)
         self._build_own(own_tab)
         self._build_monitoring(monitoring_tab)
@@ -184,26 +183,41 @@ class App(ctk.CTk):
             toggle.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
             self.mp_toggles[key] = toggle
 
+    def _build_collect(self, tab: ctk.CTkBaseClass) -> None:
+        # Поле запросов растёт вместе со списком, поэтому вкладка прокручивается.
+        parent = ctk.CTkScrollableFrame(tab, fg_color="transparent", scrollbar_button_color=theme.CARD_BORDER)
+        parent.pack(fill="both", expand=True)
+        self._build_input(parent)
+        self._build_options(parent)
+
     def _build_input(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, 1, "Площадки и что собираем")
         card.pack(fill="x", pady=(0, 12))
         self._build_marketplaces(card.body)
+        mode_row = ctk.CTkFrame(card.body, fg_color="transparent")
+        mode_row.pack(fill="x")
         self.mode = ctk.CTkSegmentedButton(
-            card.body, values=list(MODE_TITLES.values()), command=lambda _: self._refresh_mode(),
+            mode_row, values=list(MODE_TITLES.values()), command=lambda _: self._refresh_mode(),
             font=theme.font(13), height=34, selected_color=theme.ACCENT, selected_hover_color=theme.ACCENT_HOVER,
             unselected_color=theme.NEUTRAL_BUTTON, unselected_hover_color=theme.NEUTRAL_BUTTON_HOVER,
             text_color=theme.TEXT, fg_color=theme.NEUTRAL_BUTTON)
         self.mode.set(MODE_TITLES[self.settings.mode])
-        self.mode.pack(anchor="w")
+        self.mode.pack(side="left")
+        self.query_hint = ctk.CTkLabel(mode_row, text="", font=theme.font(11), text_color=theme.TEXT_MUTED,
+                                       anchor="e", justify="right")
+        self.query_hint.pack(side="right", padx=(12, 0))
 
         self.query_frame = ctk.CTkFrame(card.body, fg_color="transparent")
-        self.query = ctk.CTkEntry(self.query_frame, height=42, font=theme.font(15), border_width=1,
-                                  fg_color=theme.INPUT_BG, border_color=theme.CARD_BORDER, text_color=theme.TEXT,
-                                  placeholder_text="Например: беспроводные наушники")
-        if self.settings.query:
-            self.query.insert(0, self.settings.query)
+        # Несколько строк — несколько запросов за один запуск, поэтому здесь текстовое поле, а не строка.
+        self.query = ctk.CTkTextbox(self.query_frame, height=60, font=theme.font(15), border_width=1,
+                                    fg_color=theme.INPUT_BG, border_color=theme.CARD_BORDER,
+                                    text_color=theme.TEXT, wrap="none")
+        self.query.insert("1.0", self.settings.query)
         self.query.pack(fill="x")
-        self.query.bind("<Return>", lambda _: self._start())
+        self.query.bind("<Control-Return>", lambda _: self._start())
+        self.query.bind("<KeyRelease>", lambda _: self._refresh_query_hint())
+        self.query.bind("<<Paste>>", lambda _: self.after(50, self._refresh_query_hint))
+        self._refresh_query_hint()
 
         self.ids_frame = ctk.CTkFrame(card.body, fg_color="transparent")
         self.ids_frame.grid_columnconfigure(tuple(range(len(self.marketplaces))), weight=1, uniform="ids")
@@ -235,6 +249,22 @@ class App(ctk.CTk):
             self._update_ids_counter(key)
         self.mode_container = card.body
         self._refresh_mode()
+
+    def _queries(self) -> list[str]:
+        return [line.strip() for line in self.query.get("1.0", "end").splitlines() if line.strip()]
+
+    def _refresh_query_hint(self) -> None:
+        if self._current_mode() != InputMode.QUERY:
+            self.query_hint.configure(text="")
+            return
+        count = len(self._queries())
+        if not count:
+            text = "Несколько запросов — по одному в строке"
+        elif count == 1:
+            text = "Ещё запросы можно добавить с новой строки"
+        else:
+            text = f"Запросов: {count} — соберём каждый, в отчёте будет колонка «Запрос»"
+        self.query_hint.configure(text=text)
 
     def _build_options(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, 2, "Параметры")
@@ -571,7 +601,9 @@ class App(ctk.CTk):
             var.set(key in settings.marketplaces)
             self.mp_toggles[key]._refresh()
         self.mode.set(MODE_TITLES[settings.mode])
-        self._set_entry(self.query, settings.query)
+        self.query.delete("1.0", "end")
+        self.query.insert("1.0", settings.query)
+        self._refresh_query_hint()
         for key, box in self.ids_boxes.items():
             box.delete("1.0", "end")
             box.insert("1.0", settings.ids_text(key))
@@ -910,6 +942,8 @@ class App(ctk.CTk):
             self.ids_frame.pack(fill="x", pady=(12, 0))
         if hasattr(self, "sort"):
             self.sort.menu.configure(state="normal" if self._current_mode() == InputMode.QUERY else "disabled")
+        if hasattr(self, "query_hint"):
+            self._refresh_query_hint()
 
     def _current_mode(self) -> InputMode:
         return next(mode for mode, title in MODE_TITLES.items() if title == self.mode.get())
@@ -940,7 +974,7 @@ class App(ctk.CTk):
         settings = ParseSettings(
             marketplaces=self._selected_marketplaces(),
             mode=self._current_mode(),
-            query=self.query.get().strip(),
+            query=self.query.get("1.0", "end").strip(),
             ids={key: box.get("1.0", "end").strip() for key, box in self.ids_boxes.items()},
             max_products=max_products or self.settings.max_products,
             sort=next(order for order, title in SORT_TITLES.items() if title == self.sort.get()),
@@ -992,7 +1026,7 @@ class App(ctk.CTk):
         settings = self._collect_settings()
         if settings is None:
             return
-        self._launch(settings, "Старт: " + (f"запрос «{settings.query}»" if settings.mode == InputMode.QUERY
+        self._launch(settings, "Старт: " + (f"запрос «{settings.subject()}»" if settings.mode == InputMode.QUERY
                                             else "список артикулов и ссылок"))
 
     def _launch(self, settings: ParseSettings, title: str) -> None:
@@ -1141,7 +1175,7 @@ class App(ctk.CTk):
 
     def _collect_settings_silently(self) -> None:
         try:
-            self.settings.query = self.query.get().strip()
+            self.settings.query = self.query.get("1.0", "end").strip()
             self.settings.output_dir = self.output_dir.get().strip()
             self.settings.save()
             self._save_telegram()

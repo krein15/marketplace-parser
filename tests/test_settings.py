@@ -63,7 +63,8 @@ def test_required_fields_are_always_exported():
 
 def test_selected_fields_keep_the_registry_order():
     keys = [f.key for f in resolve(product_fields(), {"rating", "name"})]
-    assert keys == ["marketplace", "article", "name", "rating"]
+    # «Запрос» обязателен в реестре, но пустую колонку отчёт выбрасывает сам (см. test_excel).
+    assert keys == ["marketplace", "article", "query", "name", "rating"]
 
 
 def test_default_field_keys_are_valid():

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .monitoring import STATUS_ORDER
-from .settings import InputMode, ParseSettings, app_data_dir
+from .settings import ParseSettings, app_data_dir
 
 if TYPE_CHECKING:  # importing the runner here would close a circle: runner → notify → runner
     from .runner import RunResult
@@ -136,11 +136,7 @@ def _line(text: str, limit: int = 60) -> str:
 
 
 def subject(settings: ParseSettings) -> str:
-    if settings.task_name:
-        return settings.task_name
-    if settings.mode == InputMode.QUERY:
-        return settings.query.strip() or "сбор"
-    return "список артикулов"
+    return settings.task_name or settings.subject()
 
 
 def message(settings: ParseSettings, result: RunResult, started_at: datetime | None = None) -> str:

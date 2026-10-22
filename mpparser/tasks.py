@@ -37,7 +37,7 @@ class Task:
         settings = self.settings
         short = plugins.short_titles()
         parts = ["+".join(short.get(k, k) for k in settings.marketplaces)]
-        parts.append(f"«{settings.query}»" if settings.mode == InputMode.QUERY else "ссылки и артикулы")
+        parts.append(f"«{settings.subject()}»" if settings.mode == InputMode.QUERY else "ссылки и артикулы")
         parts.append(f"каждый день в {self.time}" if self.time else "вручную")
         return " · ".join(parts)
 

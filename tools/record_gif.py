@@ -22,6 +22,7 @@ from mpparser.gui.app import App, setup_logging
 FRAME_MS = 500  # one frame every half second
 WIDTH = 900  # frames are scaled down to this width
 COLORS = 128  # fewer colours — smaller file
+SCALING = 0.85
 
 
 def main() -> None:
@@ -31,6 +32,9 @@ def main() -> None:
     output_dir = Path(sys.argv[4]) if len(sys.argv) > 4 else Path.home() / "Documents" / "Marketplace Parser"
 
     setup_logging()
+    # Тот же масштаб, что и у скриншотов: окно должно поместиться на экране записи целиком.
+    ctk.set_widget_scaling(SCALING)
+    ctk.set_window_scaling(SCALING)
     ctk.set_appearance_mode("light")
     app = App()
     app._set_appearance("Светлая")  # иначе системная тема вернётся через несколько секунд
@@ -39,8 +43,9 @@ def main() -> None:
         variable.set(True)
         app.mp_toggles[key]._refresh()
     app._refresh_marketplace_state()
-    app.query.delete(0, "end")
-    app.query.insert(0, query)
+    app.query.delete("1.0", "end")
+    app.query.insert("1.0", query)
+    app._refresh_query_hint()
     app.max_products.combo.set("6")  # короткий демонстрационный сбор: GIF должен успеть дойти до «Готово»
     app.max_reviews.combo.set("2")
     app.output_dir.delete(0, "end")
@@ -51,9 +56,9 @@ def main() -> None:
 
     def grab() -> None:
         # Keep the query visible: the entry may lose it when the window is not focused.
-        if app.query.get().strip() != query:
-            app.query.delete(0, "end")
-            app.query.insert(0, query)
+        if app.query.get("1.0", "end").strip() != query:
+            app.query.delete("1.0", "end")
+            app.query.insert("1.0", query)
         app.update()
         image = window_capture.capture(app)
         frames.append(image.resize((WIDTH, round(WIDTH * image.height / image.width)), Image.LANCZOS))

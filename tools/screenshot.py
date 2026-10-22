@@ -23,7 +23,8 @@ from mpparser.gui.app import App, setup_logging
 from mpparser.settings import InputMode, ParseSettings
 from mpparser.tasks import Task, upsert_task
 
-DEMO_QUERY = "беспроводные наушники"
+DEMO_QUERY = "беспроводные наушники\nнаушники с шумоподавлением"  # две строки — два запроса за запуск
+SHOT_SCALING = 0.85
 
 
 def demo_task() -> None:
@@ -41,6 +42,9 @@ def main() -> None:
     setup_logging()
     if tab == "Мониторинг":
         demo_task()
+    # На экране со снимками окно ниже, чем у пользователя: уменьшаем масштаб, чтобы влезло целиком.
+    ctk.set_widget_scaling(SHOT_SCALING)
+    ctk.set_window_scaling(SHOT_SCALING)
     ctk.set_appearance_mode(appearance)
     app = App()
     app._set_appearance("Светлая" if appearance == "light" else "Тёмная")
@@ -49,8 +53,9 @@ def main() -> None:
         variable.set(True)
         app.mp_toggles[key]._refresh()
     app._refresh_marketplace_state()
-    app.query.delete(0, "end")
-    app.query.insert(0, DEMO_QUERY)
+    app.query.delete("1.0", "end")
+    app.query.insert("1.0", DEMO_QUERY)
+    app._refresh_query_hint()
     app.max_products.combo.set("100")
     app.max_reviews.combo.set("20")
     app._set_entry(app.price_min, 500)

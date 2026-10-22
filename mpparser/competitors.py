@@ -4,7 +4,8 @@ The user marks what is theirs — article numbers, product links, their brand or
 gains the «Конкуренты» sheet: my price next to the prices of the same search, who is cheaper and by how much,
 how my rating and review count look against the others.
 
-Everything is counted inside one marketplace: prices, ratings and places are comparable only there.
+Everything is counted inside one marketplace and one query: prices, ratings and places are
+comparable only there.
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ def parse_own(articles: str, names: str) -> Own:
 
 @dataclass
 class Spot:
-    """One of my products against the rivals of the same marketplace, cheapest first."""
+    """One of my products against the rivals of the same marketplace and query, cheapest first."""
 
     product: Product
     rivals: list[Product] = field(default_factory=list)  # only those with a known price
@@ -153,16 +154,17 @@ class Competition:
 
 
 def compare_with_rivals(products: Sequence[Product], own: Own) -> Competition:
-    """Find my products among the collected ones and line every one of them up against its marketplace."""
+    """Find my products among the collected ones and line each up against the rest of its search."""
     if not own:
         return Competition()
-    by_marketplace: dict[str, list[Product]] = defaultdict(list)
+    nearby: dict[tuple[str, str], list[Product]] = defaultdict(list)
     for product in products:
-        by_marketplace[product.marketplace].append(product)
+        nearby[(product.marketplace, product.query)].append(product)
 
     spots = []
     for product in (p for p in products if own.matches(p)):
-        rivals = [r for r in by_marketplace[product.marketplace] if r.price and not own.matches(r)]
+        rivals = [r for r in nearby[(product.marketplace, product.query)]
+                  if r.price and not own.matches(r)]
         spots.append(Spot(product, sorted(rivals, key=lambda r: r.price or 0)))
     # The products where I am losing the most matter first.
     spots.sort(key=lambda spot: (-len(spot.cheaper), spot.product.marketplace, spot.product.article))

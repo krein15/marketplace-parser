@@ -24,6 +24,10 @@ log = logging.getLogger(__name__)
 
 # Share of the progress bar given to each stage of one marketplace.
 STAGES = {"products": 0.45, "enrich": 0.2, "reviews": 0.35}
+# Что одинаково у одного товара, найденного разными запросами: карточку запрашиваем один раз.
+SHARED_DETAILS = ("name", "brand", "seller", "seller_rating", "price", "price_card", "price_old",
+                  "discount", "rating", "reviews_count", "stock", "category", "image", "url",
+                  "reviews_key")
 
 
 @dataclass
@@ -54,6 +58,42 @@ async def _listing(parser: MarketplaceParser, link: str, limit: int, reporter: R
         return []
     reporter.log(f"{parser.title}: по ссылке на выдачу собрано товаров — {len(products)}")
     return products
+
+
+async def _search_all(parser: MarketplaceParser, settings: ParseSettings, reporter: Reporter,
+                      base: float, share: float) -> list[Product]:
+    """Collect every query of the run. A product found by two queries stays in the report twice:
+    its place and its rivals differ from query to query, and that is what the run is about."""
+    queries = settings.queries
+    stage = share * STAGES["products"]
+    products: list[Product] = []
+    for number, query in enumerate(queries):
+        reporter.set_span(base + stage * number / len(queries), base + stage * (number + 1) / len(queries))
+        found = await parser.search(query, settings.max_products, settings.sort)
+        for product in found:
+            product.query = query
+        if len(queries) > 1:
+            reporter.log(f"{parser.title}: «{query}» — товаров {len(found)}")
+        products += found
+    return products
+
+
+def _once_per_product(products: list[Product]) -> list[Product]:
+    """One object per (marketplace, article): the card and the reviews are fetched once, not once per query."""
+    first: dict[tuple[str, str], Product] = {}
+    for product in products:
+        first.setdefault((product.marketplace, product.article), product)
+    return list(first.values())
+
+
+def _share_details(products: list[Product]) -> None:
+    """Give the twins from other queries what was fetched for the first of them."""
+    first: dict[tuple[str, str], Product] = {}
+    for product in products:
+        twin = first.setdefault((product.marketplace, product.article), product)
+        if twin is not product:
+            for name in SHARED_DETAILS:
+                setattr(product, name, getattr(twin, name))
 
 
 def _log_competition(reporter: Reporter, competition: Competition) -> None:
@@ -112,7 +152,7 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
 
                     reporter.set_span(base, base + share * STAGES["products"])
                     if settings.mode == InputMode.QUERY:
-                        products = await parser.search(settings.query.strip(), settings.max_products, settings.sort)
+                        products = await _search_all(parser, settings, reporter, base, share)
                     else:
                         articles, links = ids.for_marketplace(key), ids.listings_for(key)
                         if not articles and not links:
@@ -126,11 +166,13 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
 
                     reporter.set_span(base + share * STAGES["products"],
                                       base + share * (STAGES["products"] + STAGES["enrich"]))
-                    await parser.enrich(products, field_keys)
+                    once = _once_per_product(products)
+                    await parser.enrich(once, field_keys)
+                    _share_details(products)
 
                     if settings.collect_reviews:
                         reporter.set_span(base + share * (1 - STAGES["reviews"]), base + share)
-                        with_reviews = [p for p in products if p.reviews_count != 0]
+                        with_reviews = [p for p in once if p.reviews_count != 0]
                         for number, product in enumerate(with_reviews, 1):
                             reporter.progress(number - 1, len(with_reviews),
                                               f"{parser.title}: отзывы, товар {number} из {len(with_reviews)}")

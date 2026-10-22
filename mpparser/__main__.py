@@ -35,7 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
     for key, marketplace in marketplaces.items():
         parser.add_argument(f"--{key}", action="store_true", help=f"собирать с {marketplace.title}")
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("-q", "--query", help="поисковый запрос")
+    source.add_argument("-q", "--query", action="append", metavar="ЗАПРОС",
+                        help="поисковый запрос; можно указать несколько раз")
     ids_flags = " / ".join(f"--{key}-ids" for key in marketplaces)
     source.add_argument("--ids", action="store_true", help=f"режим артикулов (см. {ids_flags})")
     source.add_argument("--task", metavar="НАЗВАНИЕ", help="запустить сохранённое задание мониторинга")
@@ -112,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = ParseSettings(
         marketplaces=[k for k in marketplaces if getattr(args, k)] or list(DEFAULT_MARKETPLACES),
         mode=InputMode.QUERY if args.query else InputMode.IDS,
-        query=args.query or "",
+        query="\n".join(args.query or []),
         price_min=args.price_min,
         price_max=args.price_max,
         max_products=args.max_products,

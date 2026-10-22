@@ -172,7 +172,7 @@ class WildberriesParser(MarketplaceParser):
 
         self.page.on("request", on_request)
         try:
-            warmup = self.settings.query.strip() or "товары"
+            warmup = next(iter(self.settings.queries), "товары")
             await self.page.goto(f"{SITE}/catalog/0/search.aspx?search={quote(warmup)}", wait_until="domcontentloaded",
                                  timeout=60_000)
             request = await asyncio.wait_for(captured, TOKEN_TIMEOUT)

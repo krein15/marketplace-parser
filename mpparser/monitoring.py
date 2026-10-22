@@ -70,7 +70,7 @@ def job_key(settings: ParseSettings) -> str:
     what: dict[str, object] = {"marketplaces": sorted(settings.marketplaces), "mode": str(settings.mode)}
     if settings.mode == InputMode.QUERY:
         what |= {
-            "query": " ".join(settings.query.lower().split()),
+            "query": " | ".join(" ".join(q.lower().split()) for q in settings.queries),
             "sort": str(settings.sort),
             "limit": settings.max_products,
         }

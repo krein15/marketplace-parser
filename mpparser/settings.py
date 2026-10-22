@@ -44,6 +44,7 @@ SORT_TITLES = {
 }
 
 MAX_PRODUCTS_LIMIT = 10_000
+MAX_QUERIES = 50  # больше запросов за один запуск — это уже часы работы и риск бана
 MAX_REVIEWS_LIMIT = 1_000
 DEFAULT_MARKETPLACES = ["wb", "ozon"]
 
@@ -71,7 +72,7 @@ def default_output_dir() -> Path:
 class ParseSettings:
     marketplaces: list[str] = field(default_factory=lambda: list(DEFAULT_MARKETPLACES))
     mode: InputMode = InputMode.QUERY
-    query: str = ""
+    query: str = ""  # один запрос в строке: несколько строк — несколько запросов за запуск
     ids: dict[str, str] = field(default_factory=dict)  # marketplace key → free text: articles and/or links
     max_products: int = 100
     sort: SortOrder = SortOrder.POPULAR
@@ -94,6 +95,20 @@ class ParseSettings:
     proxy: str = ""  # адрес прокси для браузера; пусто — прямое соединение
     show_browser: bool = False
     task_name: str = ""  # set when the run is a saved monitoring task: its history is kept under this name
+
+    @property
+    def queries(self) -> list[str]:
+        """What to search for, one query per line of ``query``."""
+        return [line.strip() for line in self.query.splitlines() if line.strip()]
+
+    def subject(self) -> str:
+        """Short name of what is collected, for file names and messages."""
+        if self.mode != InputMode.QUERY:
+            return "артикулы"
+        queries = self.queries
+        if not queries:
+            return "сбор"
+        return queries[0] + (f" и ещё {len(queries) - 1}" if len(queries) > 1 else "")
 
     # --- per-marketplace values ---
 
@@ -133,8 +148,10 @@ class ParseSettings:
             problems.append(f"Площадки нет в программе: {titles}. Возможно, не установлен её модуль.")
         if not self.marketplaces:
             problems.append("Выберите хотя бы одну площадку.")
-        if self.mode == InputMode.QUERY and not self.query.strip():
+        if self.mode == InputMode.QUERY and not self.queries:
             problems.append("Введите поисковый запрос.")
+        if len(self.queries) > MAX_QUERIES:
+            problems.append(f"Запросов не больше {MAX_QUERIES} за один запуск, сейчас — {len(self.queries)}.")
         if self.mode == InputMode.IDS and not any(self.ids_text(mp).strip() for mp in self.marketplaces):
             problems.append("Добавьте артикулы или ссылки на товары.")
         if not 1 <= self.max_products <= MAX_PRODUCTS_LIMIT:
