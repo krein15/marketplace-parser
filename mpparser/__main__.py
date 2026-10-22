@@ -17,6 +17,7 @@ from logging.handlers import RotatingFileHandler
 from . import plugins
 from .fields import product_fields, review_fields
 from .marketplaces import Reporter
+from .proxy import PLACEHOLDER
 from .runner import run
 from .settings import DEFAULT_MARKETPLACES, InputMode, ParseSettings, SortOrder, app_data_dir
 from .tasks import get_task, load_tasks, mark_run
@@ -68,6 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="ключи колонок через запятую: " + ",".join(f.key for f in review_fields()))
     parser.add_argument("-o", "--output-dir", help="папка для Excel-файла")
     parser.add_argument("--show-browser", action="store_true", help="показывать окно браузера")
+    parser.add_argument("--proxy", default="", metavar="АДРЕС",
+                        help=f"прокси для браузера, например {PLACEHOLDER}")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
@@ -120,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         own_names=args.own_name,
         notify=args.notify,
         show_browser=args.show_browser,
+        proxy=args.proxy,
         open_when_done=False,
     )
     for key, marketplace in marketplaces.items():

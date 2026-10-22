@@ -17,6 +17,7 @@ from typing import Any
 
 from . import APP_NAME, plugins
 from .fields import default_keys, product_fields, review_fields
+from .proxy import ProxyError, parse_proxy
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ class ParseSettings:
     # Where the news about a finished run goes. The bot itself is set up once, in notify.py.
     notify: bool = False
     notify_file: bool = True
+    proxy: str = ""  # адрес прокси для браузера; пусто — прямое соединение
     show_browser: bool = False
     task_name: str = ""  # set when the run is a saved monitoring task: its history is kept under this name
 
@@ -145,6 +147,10 @@ class ParseSettings:
             problems.append("Цена не может быть отрицательной.")
         if self.price_min is not None and self.price_max is not None and self.price_min > self.price_max:
             problems.append("Минимальная цена больше максимальной.")
+        try:
+            parse_proxy(self.proxy)
+        except ProxyError as exc:
+            problems.append(str(exc))
         problems += self._option_problems()
         return problems
 

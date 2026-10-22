@@ -17,6 +17,7 @@ from .marketplaces import Cancelled, MarketplaceParser, ParserError, Reporter
 from .models import Product, Review
 from .monitoring import STATUS_ORDER, Comparison, Positions, update_history
 from .notify import notify
+from .proxy import IP_SERVICE, describe
 from .settings import InputMode, ParseSettings, app_data_dir
 
 log = logging.getLogger(__name__)
@@ -71,6 +72,14 @@ def _log_changes(reporter: Reporter, comparison: Comparison) -> None:
     reporter.log(f"Изменения с {comparison.previous_at:%d.%m %H:%M}: {counts}")
 
 
+async def check_proxy(browser: Browser, address: str) -> str:
+    """Ask the network who we are now. A dead proxy must be seen at once, not as an error per marketplace."""
+    status, payload = await browser.get_json(IP_SERVICE, timeout=20)
+    if status == 200 and isinstance(payload, dict) and payload.get("ip"):
+        return str(payload["ip"])
+    raise BrowserError(f"Прокси {describe(address)} не отвечает. Проверьте адрес, логин и пароль.")
+
+
 async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
     result = RunResult()
     ids = collect_ids({mp: settings.ids_text(mp) for mp in settings.marketplaces})
@@ -80,14 +89,19 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
     field_keys = set(settings.product_fields)
     share = 1 / len(settings.marketplaces)
     try:
-        reporter.log("Запускаю браузер…")
+        reporter.log("Запускаю браузер…" + (f" Прокси: {describe(settings.proxy)}"
+                                           if settings.proxy.strip() else ""))
         parsers = plugins.parsers()
         needs_window = any(parsers[key].needs_window for key in settings.marketplaces)
         if needs_window and not settings.show_browser:
             reporter.log("Авито работает только в окне браузера — оно откроется на время сбора. "
                          "Если сайт попросит проверку «я не робот», пройдите её в этом окне.")
         headless = not settings.show_browser and not needs_window
-        async with Browser(app_data_dir() / "browser-profile", headless=headless) as browser:
+        async with Browser(app_data_dir() / "browser-profile", headless=headless,
+                           proxy=settings.proxy) as browser:
+            if settings.proxy.strip():
+                address = await check_proxy(browser, settings.proxy)
+                reporter.log(f"Прокси работает, внешний адрес — {address}")
             for index, key in enumerate(settings.marketplaces):
                 parser = parsers[key](browser, settings, reporter)
                 base = index * share

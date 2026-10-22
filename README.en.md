@@ -40,6 +40,9 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
 - **Extensible.** A marketplace is a module: a new one can be added without touching the program
   (see "Adding a marketplace").
 - **Unattended runs.** Progress, log, stop at any moment (whatever was collected is still saved), a new file per run.
+- **Proxy.** The parser's browser reaches the marketplaces through the given address (http, https or
+  socks5, with a login and password when needed). The "Проверить" button shows the external IP the
+  sites see.
 - **Command line** for scheduled runs — the same `.exe` accepts arguments.
 
 ![The program at work](docs/screenshots/run.gif)
@@ -179,6 +182,12 @@ Your own products are marked the same way as in the window, and the competitor s
 python -m mpparser --wb -q "wireless headphones" --own "1023385847, 932846434" --own-name "Моя Марка"
 ```
 
+A proxy is given the same way as in the window:
+
+```bash
+python -m mpparser --wb --ozon -q "kettle" --proxy "user:password@10.0.0.1:3128"
+```
+
 A saved monitoring task runs by its name — this is exactly how Windows Task Scheduler starts it:
 
 ```bash
@@ -225,6 +234,7 @@ mpparser/
   monitoring.py         price and position history, run comparison, monitoring sheets
   competitors.py        my products against the search: place by price, the gap, who is cheaper
   notify.py             Telegram notifications: the message and the file
+  proxy.py              the proxy address: parsing and a connection check
   tasks.py, scheduler.py  tasks and Windows Task Scheduler
   export/excel.py       report sheets
   fields.py             registry of columns
@@ -252,7 +262,6 @@ tests/                  tests and fixtures
 
 ## Roadmap
 
-- Proxies for large exports.
 - A list of queries in one run.
 - Export to Google Sheets.
 - More marketplaces as separate modules.

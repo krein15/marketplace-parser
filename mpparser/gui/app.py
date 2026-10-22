@@ -26,7 +26,8 @@ from ..inputs import parse_ids
 from ..marketplaces import Reporter
 from ..notify import BOT_HELP, NotifyError, Telegram
 from ..plugins import Marketplace, Option
-from ..runner import RunResult, run
+from ..proxy import PLACEHOLDER, ProxyError, describe, parse_proxy
+from ..runner import RunResult, check_proxy, run
 from ..scheduler import SchedulerError, schedule, unschedule
 from ..settings import SORT_TITLES, InputMode, ParseSettings, app_data_dir
 from ..tasks import Task, check_name, delete_task, get_task, load_tasks, mark_run, normalize_time, upsert_task
@@ -85,8 +86,7 @@ class App(ctk.CTk):
         self._build_own(own_tab)
         self._build_monitoring(monitoring_tab)
         self._build_fields(fields_tab)
-        self._build_output(output_tab)
-        self._build_notifications(output_tab)
+        self._build_saving(output_tab)
 
         self.setup_addresses = [(mp.key, option.key) for mp in plugins.with_options()
                                 for option in mp.options if option.kind == "setup"]
@@ -595,6 +595,7 @@ class App(ctk.CTk):
         self._set_entry(self.output_dir, settings.output_dir)
         self._set_switch(self.open_when_done, settings.open_when_done)
         self._set_switch(self.show_browser, settings.show_browser)
+        self._set_entry(self.proxy, settings.proxy)
         self._set_switch(self.notify, settings.notify)
         self._set_switch(self.notify_file, settings.notify_file)
         self._refresh_mode()
@@ -675,6 +676,14 @@ class App(ctk.CTk):
         neutral_button(buttons, "По умолчанию", set_default, width=120).pack(side="left")
         return variables
 
+    def _build_saving(self, tab: ctk.CTkBaseClass) -> None:
+        # Три карточки подряд выше окна, поэтому вкладка прокручивается — как «Фильтры».
+        parent = ctk.CTkScrollableFrame(tab, fg_color="transparent", scrollbar_button_color=theme.CARD_BORDER)
+        parent.pack(fill="both", expand=True)
+        self._build_output(parent)
+        self._build_proxy(parent)
+        self._build_notifications(parent)
+
     def _build_output(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, None, "Куда сохранять отчёт")
         card.pack(fill="x", pady=(0, 4))
@@ -698,6 +707,49 @@ class App(ctk.CTk):
         if self.settings.show_browser:
             self.show_browser.select()
         self.show_browser.pack(side="left", padx=(28, 0))
+
+    def _build_proxy(self, parent: ctk.CTkBaseClass) -> None:
+        card = SectionCard(parent, None, "Прокси",
+                           hint="Браузер парсера пойдёт на площадки через этот адрес: так собирают большие "
+                                "выгрузки и смотрят на выдачу из другого региона. Подходят http, https и "
+                                "socks5, пустое поле — прямое соединение.")
+        card.pack(fill="x", pady=(12, 4))
+        row = ctk.CTkFrame(card.body, fg_color="transparent")
+        row.pack(fill="x")
+        self.proxy = ctk.CTkEntry(row, height=34, font=theme.font(13), border_width=1, fg_color=theme.INPUT_BG,
+                                  border_color=theme.CARD_BORDER, text_color=theme.TEXT,
+                                  placeholder_text=PLACEHOLDER)
+        if self.settings.proxy:  # пустая вставка стирает подсказку в поле
+            self.proxy.insert(0, self.settings.proxy)
+        self.proxy.pack(side="left", fill="x", expand=True)
+        neutral_button(row, "Проверить", self._test_proxy, width=130).pack(side="left", padx=(8, 0))
+
+    def _test_proxy(self) -> None:
+        """Open the browser the way a collection would and ask the network which address it sees."""
+        if self.worker and self.worker.is_alive():
+            self._log("warning", "Дождитесь окончания сбора — браузер сейчас занят.")
+            return
+        address = self.proxy.get().strip()
+        try:
+            parse_proxy(address)
+        except ProxyError as exc:
+            self._log("warning", str(exc))
+            return
+        self._log("info", f"Проверяю прокси {describe(address)}…" if address
+                  else "Проверяю прямое соединение…")
+
+        def work() -> None:
+            async def session() -> None:
+                async with Browser(app_data_dir() / "browser-profile", headless=True, proxy=address) as browser:
+                    found = await check_proxy(browser, address)
+                    self.events.put(("log", ("success", f"Соединение работает, внешний адрес — {found}")))
+
+            try:
+                asyncio.run(session())
+            except Exception as exc:
+                self.events.put(("log", ("error", str(exc))))
+
+        threading.Thread(target=work, name="proxy-test", daemon=True).start()
 
     def _build_notifications(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, None, "Уведомления в Telegram",
@@ -906,6 +958,7 @@ class App(ctk.CTk):
             output_dir=self.output_dir.get().strip(),
             open_when_done=bool(self.open_when_done.get()),
             show_browser=bool(self.show_browser.get()),
+            proxy=self.proxy.get().strip(),
             notify=bool(self.notify.get()),
             notify_file=bool(self.notify_file.get()),
         )

@@ -16,6 +16,8 @@ from typing import Any
 
 from patchright.async_api import BrowserContext, Page, Playwright, async_playwright
 
+from .proxy import parse_proxy
+
 log = logging.getLogger(__name__)
 
 CHANNELS = ("chrome", "msedge")
@@ -41,9 +43,10 @@ class BrowserError(RuntimeError):
 
 
 class Browser:
-    def __init__(self, profile_dir: Path, headless: bool = True) -> None:
+    def __init__(self, profile_dir: Path, headless: bool = True, proxy: str = "") -> None:
         self.profile_dir = profile_dir
         self.headless = headless
+        self.proxy = parse_proxy(proxy)  # None means a direct connection
         self._playwright: Playwright | None = None
         self._context: BrowserContext | None = None
 
@@ -83,6 +86,7 @@ class Browser:
                     no_viewport=True,
                     user_agent=user_agent,
                     locale="ru-RU",
+                    proxy=self.proxy,
                     args=["--window-size=1280,900"],
                 )
             except Exception as exc:  # Playwright reports a missing browser as a plain Error
