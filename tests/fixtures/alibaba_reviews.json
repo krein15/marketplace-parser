@@ -1,0 +1,63 @@
+{
+ "data": {
+  "target": {
+   "productReviewList": [
+    {
+     "latitudeScore": {
+      "latitudeName": "productQuality",
+      "score": 5,
+      "type": "productQuality"
+     },
+     "oriReviewContent": "i love the way quality",
+     "reviewContent": "Я обожаю качество.",
+     "reviewContentLanguage": "Английский",
+     "reviewId": 6000082014132,
+     "reviewTime": "2026/10/01",
+     "simpleReviewUserVO": {
+      "anonymousName": "A***s",
+      "country": "CO",
+      "fullNameCountry": "Колумбия"
+     }
+    },
+    {
+     "latitudeScore": {
+      "latitudeName": "productQuality",
+      "score": 5,
+      "type": "productQuality"
+     },
+     "oriReviewContent": "belle qualité",
+     "reviewContent": "Хорошее качество.",
+     "reviewContentLanguage": "Немецкий",
+     "reviewId": 6000080850882,
+     "reviewTime": "2026/08/15",
+     "simpleReviewUserVO": {
+      "anonymousName": "F***s",
+      "country": "CA",
+      "fullNameCountry": "Канада"
+     }
+    },
+    {
+     "latitudeScore": {
+      "latitudeName": "productQuality",
+      "score": 5,
+      "type": "productQuality"
+     },
+     "oriReviewContent": "i love the quality",
+     "reviewContent": "Я в восторге от качества!",
+     "reviewContentLanguage": "Английский",
+     "reviewId": 6000082014131,
+     "reviewTime": "2026/10/01",
+     "simpleReviewUserVO": {
+      "anonymousName": "A***s",
+      "country": "CO",
+      "fullNameCountry": "Колумбия"
+     }
+    }
+   ],
+   "totalCount": 10
+  }
+ },
+ "ret": [
+  "SUCCESS::调用成功"
+ ]
+}

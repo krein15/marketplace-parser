@@ -33,6 +33,15 @@ class Product:
     views: int | None = None
     seller_type: str = ""
     seller_reviews: int | None = None
+    # Wholesale (Alibaba.com): dollar prices that depend on the quantity, the minimum order, who the supplier is.
+    price_usd: float | None = None  # the lowest price, paid for the largest quantity
+    price_usd_max: float | None = None  # the price of the minimum order
+    min_order: int | None = None
+    price_tiers: str = ""  # "50–999 шт. — 7,45 $; от 1 000 шт. — 6,50 $"
+    sold: int | None = None
+    supplier_type: str = ""  # manufacturer or trading company
+    supplier_years: int | None = None
+    origin: str = ""  # where the goods come from: "Guangdong, China"
     parsed_at: datetime = field(default_factory=lambda: datetime.now().replace(microsecond=0))
     # Internal: key used to fetch reviews (WB groups reviews of all colour variants under one "root").
     reviews_key: str = ""

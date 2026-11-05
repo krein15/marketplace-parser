@@ -68,6 +68,9 @@ class MarketplaceParser(ABC):
         self.browser = browser
         self.settings = settings
         self.reporter = reporter
+        # (label, value) rows for the summary sheet: what the reader should know about this marketplace's data,
+        # e.g. the exchange rate its prices were converted at.
+        self.report_notes: list[tuple[str, str]] = []
 
     def option(self, key: str) -> Any:
         """Value of one of this marketplace's own filters, as declared in its Marketplace description."""

@@ -62,3 +62,18 @@ def ym_card() -> str:
 @pytest.fixture
 def ym_reviews() -> str:
     return load_text("ym_reviews.html")
+
+
+@pytest.fixture
+def alibaba_search() -> dict:
+    return load("alibaba_search.json")
+
+
+@pytest.fixture
+def alibaba_detail() -> str:
+    return load_text("alibaba_detail.html")
+
+
+@pytest.fixture
+def alibaba_reviews() -> dict:
+    return load("alibaba_reviews.json")

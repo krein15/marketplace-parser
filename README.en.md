@@ -12,7 +12,7 @@
 [![Tests](https://github.com/krein15/marketplace-parser/actions/workflows/tests.yml/badge.svg)](https://github.com/krein15/marketplace-parser/actions/workflows/tests.yml)
 
 A Windows desktop app that collects product cards, prices and reviews from **Wildberries, Ozon and Yandex
-Market** into a single formatted Excel report — and, when run daily, shows what went up, what went down and
+Market**, plus the wholesale prices of Chinese suppliers from **Alibaba.com**, into a single formatted Excel report — and, when run daily, shows what went up, what went down and
 what disappeared from the search results. It ships as an `.exe`, so the client does not need Python.
 
 [Русская версия](README.md) · [Example report](docs/example/example-report.xlsx) · [Download](https://github.com/krein15/marketplace-parser/releases/latest)
@@ -21,8 +21,12 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
 
 ## Features
 
-- **Three marketplaces in one report.** Wildberries, Ozon and Yandex Market separately or together, with the
-  same set of columns.
+- **Four marketplaces in one report.** Wildberries, Ozon, Yandex Market and Alibaba.com separately or together,
+  with the same set of columns.
+- **Sourcing in China next to selling.** Alibaba.com is the export marketplace of Chinese factories: the price
+  range in dollars and in roubles at the Bank of Russia rate, price tiers by quantity, the minimum order, and
+  whether the supplier is a manufacturer or a trading company. No account needed; the site itself translates
+  titles and reviews into Russian.
 - **Three ways to say what to collect.** A search query, a list of article numbers and product links, or a link
   to search results with the filters already set on the site.
 - **A list of queries in one run.** One query per line: the parser walks through all of them, the
@@ -37,9 +41,10 @@ what disappeared from the search results. It ships as an `.exe`, so the client d
   report gains the "Конкуренты" and "Кто дешевле" sheets: your place by price, the gap to the cheapest
   offer, the deviation from the median, your rating and reviews against the market.
 - **Filters.** Price for every marketplace; WB delivery region (25 cities); Market rating from 4.0 and delivery
-  time; the delivery address for Ozon and Market is chosen once in the parser's browser.
+  time; Alibaba.com suppliers from China only, verified suppliers, store rating, a cap on the minimum order and
+  no ads; the delivery address for Ozon and Market is chosen once in the parser's browser.
 - **Reviews.** Up to 1000 recent reviews per product: date, score, text, pros, cons, seller reply.
-- **Selectable columns.** 18 product fields and 13 review fields, switched on and off with checkboxes.
+- **Selectable columns.** 27 product fields and 13 review fields, switched on and off with checkboxes.
 - **Extensible.** A marketplace is a module: a new one can be added without touching the program
   (see "Adding a marketplace").
 - **Unattended runs.** Progress, log, stop at any moment (whatever was collected is still saved), a new file per run.
@@ -66,7 +71,9 @@ Excel columns are picked with checkboxes; the dark theme is switched in the head
 
 **Products** — marketplace, article, query (when there are several), position in search results, name, brand, seller and seller rating, price,
 card price (Ozon and Market), price before discount, discount %, rating, review count, stock (Ozon), category,
-photo, link, collection timestamp.
+photo, link, collection timestamp. Alibaba.com adds the price range in dollars, the minimum order, price tiers
+by quantity, units sold, supplier type, years on the site and origin; its rouble price uses the Bank of Russia
+rate of the day, and the rate itself is written to the summary sheet.
 
 **Reviews** — marketplace, article, product, date, score, author, text, pros, cons, product variant, photo
 count, "useful" votes, seller reply (WB).
@@ -93,7 +100,8 @@ parser does not forge requests — it works through a real browser:
    a plain page load on Market.
 3. Requests are then issued from inside the opened page, so they carry the right cookies, headers and TLS
    fingerprint. Wildberries returns 100 products per page, Ozon returns the JSON of its own pages, Market
-   returns the HTML of search results and cards.
+   returns the HTML of search results and cards, Alibaba.com returns search JSON, card data inside the card's
+   HTML and reviews through a signed API, the same way its own pages get them.
 4. Everything is normalised into single `Product` and `Review` models and exported with **openpyxl**.
 
 The browser profile is kept between runs: checks pass faster and the delivery address is chosen only once.
@@ -132,7 +140,7 @@ and their names and reviews are personal data under Russian law. Get in touch if
   Chrome, neither of which supports those versions any more.
 - Google Chrome or Microsoft Edge (preinstalled on Windows 10 and 11) — the app drives the browser that is
   already installed instead of bundling one.
-- Access to the marketplaces from a Russian IP address.
+- Access to the marketplaces from a Russian IP address (Alibaba.com works from anywhere).
 - About 400 MB of free disk space.
 
 ## First launch: Windows warning and antivirus
@@ -177,6 +185,12 @@ it is under 50 MB.
 
 ```bash
 python -m mpparser --wb --ozon --ym -q "wireless headphones" -n 100 -r 20 --price-min 500 --wb-region Казань
+```
+
+Sourcing prices on Alibaba.com — the query may be in Russian, the site translates it:
+
+```bash
+python -m mpparser --alibaba -q "термокружка" -n 100 --alibaba-china-only --alibaba-max-moq 100 --alibaba-store-rating 45
 ```
 
 Your own products are marked the same way as in the window, and the competitor sheets appear in the report:
@@ -240,6 +254,8 @@ mpparser/
     wildberries.py      search, cards, reviews, photos, region
     ozon.py             search, cards, reviews, card price
     yandex_market.py    search results, cards, reviews, filters
+    alibaba.py          search, cards with price tiers, reviews, supplier filters
+  currency.py           Bank of Russia rates: dollars to roubles, a saved rate for when the bank is unreachable
   monitoring.py         price and position history, run comparison, monitoring sheets
   competitors.py        my products against the search: place by price, the gap, who is cheaper
   notify.py             Telegram notifications: the message and the file
@@ -262,6 +278,11 @@ tests/                  tests and fixtures
   columns enabled the parser opens every card, which is slower.
 - **Market's region** is detected by IP unless you sign in; prices barely depend on it, availability and
   delivery times do.
+- **Alibaba.com.** Product rating, brand, category, price tiers and supplier type exist only on the product page,
+  so those columns make the run slower. The site has no sorting: products come in its own order. Roubles use the
+  Bank of Russia rate of the day, so in monitoring a price also moves with the rate. Titles and reviews are the
+  site's machine translation. 1688 and Taobao are not supported: they serve the domestic Chinese market and
+  require a Chinese account.
 - **"Gone from search results"** often means a change of promoted placements rather than a delisting — the
   report says so.
 - **Marketplaces change their markup.** Every parser is covered by tests on saved responses, so a break shows
