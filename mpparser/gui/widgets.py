@@ -13,7 +13,8 @@ from . import theme
 class SectionCard(ctk.CTkFrame):
     """A rounded card with a title; put content into ``self.body``. ``number`` adds a step badge."""
 
-    def __init__(self, master: ctk.CTkBaseClass, number: int | None, title: str, hint: str = "") -> None:
+    def __init__(self, master: ctk.CTkBaseClass, number: int | None, title: str, hint: str = "",
+                 hint_width: int = 560) -> None:
         super().__init__(master, fg_color=theme.CARD_BG, corner_radius=14, border_width=1,
                          border_color=theme.CARD_BORDER)
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -24,7 +25,7 @@ class SectionCard(ctk.CTkFrame):
         ctk.CTkLabel(header, text=title, font=theme.font(15, "bold"), text_color=theme.TEXT).pack(side="left")
         if hint:
             ctk.CTkLabel(self, text=hint, font=theme.font(12), text_color=theme.TEXT_MUTED, justify="left",
-                         anchor="w", wraplength=560).pack(fill="x", padx=18, pady=(4, 0))
+                         anchor="w", wraplength=hint_width).pack(fill="x", padx=18, pady=(4, 0))
         self.body = ctk.CTkFrame(self, fg_color="transparent")
         self.body.pack(fill="both", expand=True, padx=18, pady=(8, 14))
 

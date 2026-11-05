@@ -43,6 +43,7 @@ TABLE_STYLE = TableStyleInfo(name="TableStyleLight1", showRowStripes=True)
 
 NUMBER_FORMATS = {
     "money": '#,##0 "₽"',
+    "usd": '#,##0.00 "$"',
     "percent": '0"%"',
     "rating": "0.0",
     "int": "#,##0",
@@ -77,6 +78,7 @@ def export_to_excel(
     dynamics: Dynamics | None = None,
     positions: Positions | None = None,
     competition: Competition | None = None,
+    notes: Sequence[tuple[str, str]] = (),
 ) -> Path:
     workbook = Workbook()
     products_sheet = workbook.active
@@ -89,7 +91,7 @@ def export_to_excel(
         review_columns = resolve(review_fields(), settings.review_fields, settings.marketplaces)
         _write_table(workbook.create_sheet("Отзывы"), "Reviews", review_columns, reviews, "C2")
     _write_summary(workbook.create_sheet("Сводка", 0), settings, products, reviews, started_at, comparison,
-                   competition)
+                   competition, notes)
     if comparison is not None:
         _write_changes(workbook.create_sheet("Изменения", 1), comparison)
     if competition:
@@ -174,6 +176,7 @@ def _write_summary(
     started_at: datetime,
     comparison: Comparison | None = None,
     competition: Competition | None = None,
+    notes: Sequence[tuple[str, str]] = (),
 ) -> None:
     sheet.sheet_view.showGridLines = False
     sheet["A1"] = "Сбор данных с маркетплейсов"
@@ -194,6 +197,7 @@ def _write_summary(
         subject,
         ("Сортировка", SORT_TITLES[settings.sort] if settings.mode == InputMode.QUERY else "—"),
         *settings.filters_summary(),
+        *notes,  # what a marketplace wants the reader to know, e.g. the exchange rate its prices were converted at
         ("Собрано товаров", len(products)),
         ("Собрано отзывов", len(reviews) if settings.collect_reviews else "не собирались"),
     ]

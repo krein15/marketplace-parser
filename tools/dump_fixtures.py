@@ -3,7 +3,7 @@
 Marketplaces change their JSON from time to time; run this script after such a change, review the diff
 and fix the parsers until the tests pass again.
 
-Usage: python tools/dump_fixtures.py [wb] [ozon] [ym]   (all marketplaces when none is given)
+Usage: python tools/dump_fixtures.py [wb] [ozon] [ym] [alibaba]   (all marketplaces when none is given)
 
 Marketplaces that ship as separate packages keep their own copy of this tool.
 """
@@ -16,11 +16,13 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mpparser.browser import Browser
+from mpparser.marketplaces import alibaba
+from mpparser.marketplaces.alibaba import AlibabaParser
 from mpparser.marketplaces.base import Reporter
 from mpparser.marketplaces.ozon import OzonParser, widgets
 from mpparser.marketplaces.wildberries import DETAIL_PATH, FEEDBACK_HOSTS, WildberriesParser
@@ -34,6 +36,11 @@ OZON_WIDGET_PREFIXES = ("webProductHeading", "webPrice", "webReviewProductScore"
                         "webGallery", "breadCrumbs", "webListReviews", "tileGridDesktop",
                         "infiniteVirtualPaginator")
 YM_COLLECTIONS = {"productCardMeta", "price", "shopInfo", "reviewV2"}
+ALIBABA_OFFER_KEYS = {"productId", "productUrl", "multiImage", "imageUrl", "title", "price", "moq", "soldOrder",
+                      "companyName", "companyId", "countryCode", "goldSupplierYears", "reviewScore", "reviewCount",
+                      "isShowAd"}
+ALIBABA_REVIEW_KEYS = {"reviewId", "reviewTime", "latitudeScore", "reviewContent", "oriReviewContent",
+                       "reviewContentLanguage"}
 YM_REVIEW_KEYS = {"id", "author", "rating", "descriptor", "media", "votes", "comment", "pro", "contra",
                   "liteOffer", "analyticsData"}
 
@@ -132,7 +139,71 @@ async def dump_ym(browser: Browser, settings: ParseSettings, reporter: Reporter)
     save("ym_reviews.html", trim_ym_page(await ym._html(f"/card/x/{sku}/reviews")))
 
 
-DUMPERS = {"wb": dump_wb, "ozon": dump_ozon, "ym": dump_ym}
+def trim_alibaba_search(data: dict, offers_limit: int = 3) -> dict:
+    """60 offers with tracking data weigh 600 KB; keep a few offers and the keys the parser reads."""
+    model = data.get("model") or {}
+    offers = [{key: value for key, value in offer.items() if key in ALIBABA_OFFER_KEYS}
+              for offer in (model.get("offers") or [])[:offers_limit]]
+    for offer in offers:
+        offer["multiImage"] = (offer.get("multiImage") or [])[:1]
+    return {"success": data.get("success"), "model": {"offers": offers, "paginationData": model.get("paginationData")}}
+
+
+def trim_alibaba_detail(page_html: str) -> str:
+    """Keep only what the parser reads from ``window.detailData``: 400 KB of HTML → a few KB."""
+    root = alibaba.detail_data(page_html)["globalData"]
+    product, seller = root["product"], root.get("seller") or {}
+    product_keys = ("productId", "subject", "moq", "price", "productBasicProperties")
+    seller_keys = ("companyName", "companyId", "companyBusinessType", "companyJoinYears")
+    kept = {
+        "product": {key: product.get(key) for key in product_keys},
+        "seller": {key: seller.get(key) for key in seller_keys},
+        "review": root.get("review"),
+        "trade": {"salesVolume": (root.get("trade") or {}).get("salesVolume")},
+        "seo": {"breadCrumb": (root.get("seo") or {}).get("breadCrumb")},
+    }
+    kept["product"]["mediaItems"] = (product.get("mediaItems") or [])[:1]
+    kept["seller"]["supplierRatingReviews"] = {
+        "averageStar": (seller.get("supplierRatingReviews") or {}).get("averageStar")}
+    payload = json.dumps({"globalData": kept}, ensure_ascii=False)
+    return f"<html><body><script>\n window.detailData = {payload};\n</script></body></html>\n"
+
+
+def trim_alibaba_reviews(answer: dict, limit: int = 3) -> dict:
+    target = (answer.get("data") or {}).get("target") or {}
+    items = []
+    for item in (target.get("productReviewList") or [])[:limit]:
+        kept = {key: value for key, value in item.items() if key in ALIBABA_REVIEW_KEYS}
+        user = item.get("simpleReviewUserVO") or {}
+        kept["simpleReviewUserVO"] = {key: user.get(key) for key in ("anonymousName", "country", "fullNameCountry")}
+        items.append(kept)
+    return {"data": {"target": {"productReviewList": items, "totalCount": target.get("totalCount")}},
+            "ret": answer.get("ret")}
+
+
+async def dump_alibaba(browser: Browser, settings: ParseSettings, reporter: Reporter) -> None:
+    parser = AlibabaParser(browser, settings, reporter)
+    await parser.prepare()
+    query = {**alibaba.search_params("thermos cup", settings, parser.rate), "page": 1, "pageSize": 60,
+             "language": alibaba.LANGUAGE}
+    search = await parser._json(f"{alibaba.SITE}{alibaba.SEARCH_API}?{urlencode(query)}")
+    save("alibaba_search.json", trim_alibaba_search(search))
+    # The card fixture should have product reviews: the parser reads the rating from it.
+    for offer in search["model"]["offers"][:15]:
+        page_html = await parser._get(f"{alibaba.SITE}/product-detail/_{offer['productId']}.html", "text/html")
+        data = alibaba.detail_data(page_html)
+        if data and (data["globalData"].get("review") or {}).get("productReview"):
+            break
+    else:
+        raise RuntimeError("no card with product reviews among the first results")
+    save("alibaba_detail.html", trim_alibaba_detail(page_html))
+    answer = await parser._mtop(alibaba.REVIEWS_API, {
+        "clusterId": 0, "currentPage": 1, "pageSize": 20, "language": alibaba.LANGUAGE, "currency": "USD",
+        "countryCode": "RU", "companyId": int(offer["companyId"]), "productId": int(offer["productId"])})
+    save("alibaba_reviews.json", trim_alibaba_reviews(answer))
+
+
+DUMPERS = {"wb": dump_wb, "ozon": dump_ozon, "ym": dump_ym, "alibaba": dump_alibaba}
 
 
 async def main(keys: list[str]) -> None:

@@ -364,7 +364,7 @@ class App(ctk.CTk):
 
     def _build_marketplace_filters(self, parent: ctk.CTkBaseClass, marketplace: Marketplace,
                                    row: int, column: int) -> None:
-        card = SectionCard(parent, None, marketplace.title, hint=marketplace.notes)
+        card = SectionCard(parent, None, marketplace.title, hint=marketplace.notes, hint_width=self.CARD_WIDTH - 64)
         card.grid(row=row, column=column, sticky="new", padx=(0, 5) if column == 0 else (5, 0), pady=(0, 8))
         # Controls flow left to right and wrap to the next line when the card runs out of width.
         options = [o for o in marketplace.options if o.kind != "setup"]
@@ -658,9 +658,10 @@ class App(ctk.CTk):
 
     def _build_fields(self, parent: ctk.CTkBaseClass) -> None:
         card = SectionCard(parent, None, "Какие колонки попадут в файл",
-                           hint="Бренд, продавец и категория для Ozon и Маркета, а также адрес, просмотры и тип "
-                                "продавца для Авито есть только на странице товара: парсер откроет каждую, "
-                                "сбор займёт больше времени. На Авито — около 6 секунд на объявление.")
+                           hint="Бренд, продавец и категория для Ozon и Маркета, рейтинг товара, оптовые цены и тип "
+                                "поставщика для Alibaba.com, а также адрес, просмотры и тип продавца для Авито есть "
+                                "только на странице товара: парсер откроет каждую, сбор займёт больше времени. "
+                                "На Авито — около 6 секунд на объявление.")
         card.pack(fill="x", pady=(0, 14))
         tabs = ctk.CTkTabview(card.body, height=10, fg_color=theme.INPUT_BG, corner_radius=10,
                               segmented_button_selected_color=theme.ACCENT,

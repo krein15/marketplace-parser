@@ -144,6 +144,18 @@ class Browser:
                 await asyncio.sleep(1)
         raise AssertionError("unreachable")
 
+    async def get_text(self, url: str, encoding: str = "utf-8", timeout: float = 30) -> str | None:
+        """GET a page outside of any page context, through the same proxy. None if it did not answer."""
+        try:
+            response = await self.context.request.get(url, timeout=timeout * 1000)
+            if not response.ok:
+                log.warning("Request failed %s: HTTP %s", url, response.status)
+                return None
+            return (await response.body()).decode(encoding, errors="replace")
+        except Exception as exc:
+            log.warning("Request failed %s: %s", url, exc)
+            return None
+
     async def get_json(self, url: str, timeout: float = 30) -> tuple[int, Any]:
         """GET an unprotected endpoint outside of any page. Returns (status, parsed JSON or None)."""
         try:

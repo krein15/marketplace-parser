@@ -113,6 +113,7 @@ class Marketplace:
     article_from: Callable[[str], str | None] | None = None  # when patterns alone cannot tell the article
     product_fields: tuple[Field, ...] = ()  # columns only this marketplace fills
     review_fields: tuple[Field, ...] = ()
+    empty_fields: tuple[str, ...] = ()  # core columns it never fills: dropped from a report of it alone
     options: tuple[Option, ...] = ()
     order: int = 100  # position in the window and in the report
     filters_label: str = ""  # report row for the grouped filters; defaults to "Фильтры <title>"
@@ -151,9 +152,9 @@ class _Registry:
 
 def _builtin() -> list[Marketplace]:
     # Imported here and not at module level: the parsers import settings, which reads this registry.
-    from .marketplaces import ozon, wildberries, yandex_market
+    from .marketplaces import alibaba, ozon, wildberries, yandex_market
 
-    return [wildberries.MARKETPLACE, ozon.MARKETPLACE, yandex_market.MARKETPLACE]
+    return [wildberries.MARKETPLACE, ozon.MARKETPLACE, yandex_market.MARKETPLACE, alibaba.MARKETPLACE]
 
 
 def _external() -> tuple[list[Marketplace], list[str]]:

@@ -85,7 +85,7 @@ def _add_option(group: argparse._ArgumentGroup, key: str, title: str, option: pl
     if option.kind == "setup":
         return
     flag, dest = option.flag(key), option_dest(key, option.key)
-    help_text = f"{title}: {option.title.lower()}"
+    help_text = f"{title}: {option.title[:1].lower()}{option.title[1:]}"
     if option.kind == "switch":
         group.add_argument(flag, dest=dest, action="store_true", help=help_text)
     elif option.kind == "choice":

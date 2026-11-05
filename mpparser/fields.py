@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-Kind = Literal["text", "wrap", "int", "rating", "money", "percent", "url", "datetime"]
+Kind = Literal["text", "wrap", "int", "rating", "money", "usd", "percent", "url", "datetime"]
 
 
 @dataclass(frozen=True)
@@ -86,8 +86,20 @@ def resolve(fields: Sequence[Field], keys: list[str] | set[str],
             marketplaces: list[str] | None = None) -> list[Field]:
     """Return the selected fields in registry order; required fields are always included.
 
-    With ``marketplaces`` given, columns that none of them fills are dropped (no empty "Город" in a WB report).
+    With ``marketplaces`` given, columns that none of them fills are dropped (no empty "Город" in a WB report,
+    no empty "Скидка, %" in an Alibaba.com one).
     """
     wanted = set(keys)
     return [f for f in fields if (f.required or f.key in wanted)
-            and (marketplaces is None or not f.only or set(f.only) & set(marketplaces))]
+            and (marketplaces is None or _filled_by_any(f, marketplaces))]
+
+
+def _filled_by_any(spec: Field, marketplaces: list[str]) -> bool:
+    if spec.only and not set(spec.only) & set(marketplaces):
+        return False
+    if spec.required:
+        return True
+    from . import plugins
+
+    declared = [plugins.get(key) for key in marketplaces]
+    return not all(mp is not None and spec.key in mp.empty_fields for mp in declared)

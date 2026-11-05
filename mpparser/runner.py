@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 
@@ -24,10 +24,9 @@ log = logging.getLogger(__name__)
 
 # Share of the progress bar given to each stage of one marketplace.
 STAGES = {"products": 0.45, "enrich": 0.2, "reviews": 0.35}
-# Что одинаково у одного товара, найденного разными запросами: карточку запрашиваем один раз.
-SHARED_DETAILS = ("name", "brand", "seller", "seller_rating", "price", "price_card", "price_old",
-                  "discount", "rating", "reviews_count", "stock", "category", "image", "url",
-                  "reviews_key")
+# Что у одного товара, найденного разными запросами, своё: всё остальное одинаково, карточку запрашиваем один раз.
+PER_QUERY = {"marketplace", "article", "position", "query", "parsed_at"}
+SHARED_DETAILS = tuple(f.name for f in fields(Product) if f.name not in PER_QUERY)
 
 
 @dataclass
@@ -42,6 +41,7 @@ class RunResult:
     comparison: Comparison | None = None
     competition: Competition | None = None
     positions: Positions | None = None
+    notes: list[tuple[str, str]] = field(default_factory=list)  # rows for the summary sheet, from the marketplaces
 
 
 def _merge(products: list[Product], more: list[Product]) -> list[Product]:
@@ -132,9 +132,11 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
         reporter.log("Запускаю браузер…" + (f" Прокси: {describe(settings.proxy)}"
                                            if settings.proxy.strip() else ""))
         parsers = plugins.parsers()
-        needs_window = any(parsers[key].needs_window for key in settings.marketplaces)
+        windowed = [parsers[key].title for key in settings.marketplaces if parsers[key].needs_window]
+        needs_window = bool(windowed)
         if needs_window and not settings.show_browser:
-            reporter.log("Авито работает только в окне браузера — оно откроется на время сбора. "
+            works = "работает" if len(windowed) == 1 else "работают"
+            reporter.log(f"{' и '.join(windowed)} {works} только в окне браузера — оно откроется на время сбора. "
                          "Если сайт попросит проверку «я не робот», пройдите её в этом окне.")
         headless = not settings.show_browser and not needs_window
         async with Browser(app_data_dir() / "browser-profile", headless=headless,
@@ -195,6 +197,8 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
                     message = f"{parser.title}: непредвиденная ошибка — {exc}"
                     result.errors.append(message)
                     reporter.log(message, "error")
+                finally:
+                    result.notes += parser.report_notes
     except Cancelled:
         result.cancelled = True
         reporter.warn("Сбор остановлен пользователем. Сохраняю то, что успели собрать.")
@@ -218,7 +222,7 @@ async def run(settings: ParseSettings, reporter: Reporter) -> RunResult:
         _log_competition(reporter, result.competition)
         path = Path(settings.output_dir) / build_file_name(settings, result.started_at)
         export_to_excel(path, settings, result.products, result.reviews, result.started_at, result.comparison,
-                        dynamics, result.positions, result.competition)
+                        dynamics, result.positions, result.competition, result.notes)
         result.path = path
         reporter.log(f"Файл сохранён: {path}", "success")
         if notify(settings, result, reporter.warn):
